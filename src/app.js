@@ -1,10 +1,13 @@
 const express = require('express');
 const app = express();
+const connectDB = require('./config/db');
 
 // Middleware
 app.use(express.json());
 const cors = require('cors');
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || '*', credentials: true }));
+
+
 
 // Health check endpoint
 app.get('/', (req, res) => {
