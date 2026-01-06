@@ -3,6 +3,7 @@ const FemaleUser = require('../../models/femaleUser/FemaleUser');
 const CallHistory = require('../../models/common/CallHistory');
 const Transaction = require('../../models/common/Transaction');
 const AdminConfig = require('../../models/admin/AdminConfig');
+const AdminLevelConfig = require('../../models/admin/AdminLevelConfig');
 const MaleFollowing = require('../../models/maleUser/Following');
 const FemaleFollowing = require('../../models/femaleUser/Following');
 const messages = require('../../validations/messages');
@@ -69,99 +70,145 @@ exports.startCall = async (req, res) => {
       });
     }
 
-    // Get admin config
-    const adminConfig = await AdminConfig.getConfig();
+    // Get the level configuration for the receiver's current level
+    const levelConfig = await AdminLevelConfig.findOne({ 
+      level: receiver.currentLevel, 
+      isActive: true 
+    });
     
-    // Validate admin margins per minute are configured
-    if (adminConfig.marginAgencyPerMinute === undefined || adminConfig.marginAgencyPerMinute === null) {
+    if (!levelConfig) {
       return res.status(400).json({
         success: false,
-        message: 'Admin margin per minute for agency females not configured'
+        message: 'Level configuration not found for receiver'
       });
     }
     
-    if (adminConfig.marginNonAgencyPerMinute === undefined || adminConfig.marginNonAgencyPerMinute === null) {
+    // Get female earning rate per minute from level config based on call type and convert to per second
+    const femaleRatePerMinute = 
+      callType === 'audio' 
+        ? levelConfig.audioRatePerMinute 
+        : levelConfig.videoRatePerMinute;
+    
+    if (!femaleRatePerMinute) {
       return res.status(400).json({
         success: false,
-        message: 'Admin margin per minute for non-agency females not configured'
+        message: 'Level configuration does not have rate set for this call type'
       });
     }
     
-    // Get female earning rate per minute and convert to per second
-    if (!receiver.coinsPerMinute) {
-      return res.status(400).json({
-        success: false,
-        message: 'Female call rate not set'
-      });
-    }
-    
-    const femaleEarningPerSecond = receiver.coinsPerMinute / 60;
+    const femaleRatePerSecond = femaleRatePerMinute / 60;
     
     // Determine if female belongs to agency
     const isAgencyFemale = receiver.referredByAgency && receiver.referredByAgency.length > 0;
     
     // Get platform margin per minute and convert to per second
-    const platformMarginPerMinute = isAgencyFemale 
-      ? adminConfig.marginAgencyPerMinute
-      : adminConfig.marginNonAgencyPerMinute;
+    const platformMarginPerMinute = 
+      isAgencyFemale 
+        ? levelConfig.platformMarginPerMinute.agency
+        : levelConfig.platformMarginPerMinute.nonAgency;
     
-    const platformMarginPerSecond = platformMarginPerMinute / 60;
+    const platformRatePerSecond = platformMarginPerMinute / 60;
     
     // Calculate male pay rate per second
-    const malePayPerSecond = femaleEarningPerSecond + platformMarginPerSecond;
+    const malePayPerSecond = femaleRatePerSecond + platformRatePerSecond;
     
-    // Get minimum call coins setting from admin config
-    if (adminConfig.minCallCoins === undefined || adminConfig.minCallCoins === null) {
-      return res.status(400).json({
-        success: false,
-        message: 'Minimum call coins not configured by admin'
-      });
+    // Get admin config
+    const adminConfig = await AdminConfig.getConfig();
+    
+    // Check minCallCoins as an entry requirement (anti-spam quality gate)
+    if (adminConfig.minCallCoins !== undefined && adminConfig.minCallCoins !== null && adminConfig.minCallCoins > 0) {
+      if (caller.coinBalance < adminConfig.minCallCoins) {
+        return res.status(400).json({
+          success: false,
+          message: 'Insufficient balance to start call. Please recharge.',
+          data: {
+            available: caller.coinBalance,
+            required: adminConfig.minCallCoins
+          }
+        });
+      }
     }
-    const minCallCoins = adminConfig.minCallCoins;
-
-    // Check if user can afford at least 1 second of the call
-    if (caller.coinBalance < malePayPerSecond) {
+    
+    // Apply minimum billable duration rule for start validation
+    const MIN_BILLABLE_SECONDS = 30;
+    const minCoinsToStart = Math.ceil(MIN_BILLABLE_SECONDS * malePayPerSecond);
+    
+    // Check if user has enough coins for minimum billable duration
+    if (caller.coinBalance < minCoinsToStart) {
       return res.status(400).json({
         success: false,
         message: messages.CALL.NOT_ENOUGH_COINS,
         data: {
           available: caller.coinBalance,
-          required: malePayPerSecond,
-          shortfall: malePayPerSecond - caller.coinBalance
+          required: minCoinsToStart,
+          femaleRatePerSecond,
+          platformRatePerSecond,
+          malePayPerSecond,
+          minBillableSeconds: MIN_BILLABLE_SECONDS
         }
       });
     }
-
+    
+    // Check for existing active session to prevent multiple calls
+    const CallSession = require('../../models/common/CallSession');
+        
+    const existingSession = await CallSession.findOne({
+      callerId,
+      isActive: true
+    });
+        
+    if (existingSession) {
+      return res.status(400).json({
+        success: false,
+        message: 'You already have an active call session'
+      });
+    }
+        
     // Calculate maximum possible seconds based on male's balance and the total rate
     const maxSeconds = Math.floor(caller.coinBalance / malePayPerSecond);
-
-    // Check if user has enough coins for at least 1 second
-    if (maxSeconds <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: messages.CALL.NOT_ENOUGH_COINS,
-        data: {
-          available: caller.coinBalance,
-          femaleEarningPerSecond,
-          platformMarginPerSecond,
-          malePayPerSecond,
-          maxSeconds: 0
-        }
-      });
-    }
-
+        
+    // Create a call session to freeze rates and prevent rate changes during call
+        
+    // Generate a unique call session ID
+    const callId = `call_${callerId}_${receiverId}_${Date.now()}`;
+        
+    // Set session to expire after 2 hours (in case call doesn't end properly)
+    const sessionExpiry = new Date();
+    sessionExpiry.setHours(sessionExpiry.getHours() + 2);
+        
+    await CallSession.create({
+      callId,
+      callerId,
+      receiverId,
+      femaleRatePerSecond,
+      platformRatePerSecond,
+      malePayPerSecond,
+      callType,
+      receiverLevel: receiver.currentLevel,
+      isAgencyFemale,
+      femaleRatePerMinute: femaleRatePerMinute,
+      platformMarginPerMinute: platformMarginPerMinute,
+      expiresAt: sessionExpiry
+    });
+    
     // Return success response with maxSeconds for frontend timer
     return res.json({
       success: true,
       message: messages.CALL.CALL_CAN_START,
       data: {
+        callId, // Include the call session ID
         maxSeconds,
-        femaleEarningPerSecond,
-        platformMarginPerSecond,
+        femaleRatePerSecond,
+        platformRatePerSecond,
         malePayPerSecond,
         callerCoinBalance: caller.coinBalance,
-        minCallCoins,
-        isAgencyFemale
+        isAgencyFemale,
+        receiverLevel: receiver.currentLevel,
+        levelConfig: {
+          audioRatePerMinute: levelConfig.audioRatePerMinute,
+          videoRatePerMinute: levelConfig.videoRatePerMinute,
+          platformMarginPerMinute: platformMarginPerMinute
+        }
       }
     });
 
@@ -176,7 +223,7 @@ exports.startCall = async (req, res) => {
 
 // End Call - Calculate coins, deduct from male, credit to female
 exports.endCall = async (req, res) => {
-  const { receiverId, duration, callType } = req.body;
+  const { receiverId, duration, callType, callId } = req.body;
   const callerId = req.user._id; // Authenticated male user
 
   try {
@@ -197,7 +244,7 @@ exports.endCall = async (req, res) => {
     }
 
     // Get caller (male user) and receiver (female user)
-    const caller = await MaleUser.findById(callerId);
+    let caller = await MaleUser.findById(callerId);
     const receiver = await FemaleUser.findById(receiverId);
 
     if (!caller || !receiver) {
@@ -207,96 +254,76 @@ exports.endCall = async (req, res) => {
       });
     }
 
-    // Determine if female belongs to agency (needed for zero duration calls)
-    const isAgencyFemale = receiver.referredByAgency && receiver.referredByAgency.length > 0;
+    // Get the call session to use frozen rates (prevents rate changes during call)
+    const CallSession = require('../../models/common/CallSession');
     
-    // If duration is 0 or very short (less than 1 second), no charges
-    if (duration === 0) {
-      const callRecord = await CallHistory.create({
-        callerId,
-        receiverId,
-        duration: 0,
-        femaleEarningPerMinute: receiver.coinsPerMinute,
-        platformMarginPerMinute: platformMarginPerMinute,
-        femaleEarningPerSecond: 0,
-        platformMarginPerSecond: 0,
-        totalCoins: 0,
-        femaleEarning: 0,
-        platformMargin: 0,
-        adminEarned: 0,
-        agencyEarned: 0,
-        isAgencyFemale,
-        callType: callType || 'video',
-        status: 'completed'
+    if (!callId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Call session ID is required'
       });
+    }
+    
+    const callSession = await CallSession.findOne({ 
+      callId, 
+      callerId, 
+      receiverId, 
+      isActive: true 
+    });
+    
+    if (!callSession) {
+      return res.status(400).json({
+        success: false,
+        message: 'Call session not found or invalid. Call may have expired or already ended.'
+      });
+    }
 
-      return res.json({
-        success: true,
-        message: messages.CALL.CALL_NO_CHARGES,
-        data: {
-          duration: 0,
-          coinsDeducted: 0,
-          coinsCredited: 0,
-          callId: callRecord._id
-        }
+    // Use frozen rates from the call session
+    const {
+      femaleRatePerSecond,
+      platformRatePerSecond,
+      malePayPerSecond,
+      isAgencyFemale,
+      femaleRatePerMinute,
+      platformMarginPerMinute
+    } = callSession;
+    
+    // Determine if female belongs to agency (from session)
+    
+    // If duration is 0, return error as this should not happen with proper validation
+    if (duration <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Call did not connect. No charges applied.'
       });
     }
 
     // Get admin config
     const adminConfig = await AdminConfig.getConfig();
     
-    // Validate admin margins per minute are configured
-    if (adminConfig.marginAgencyPerMinute === undefined || adminConfig.marginAgencyPerMinute === null) {
+    // Use frozen per-minute rate from the session (not live data)
+    const femaleEarningPerMinute = femaleRatePerMinute;
+    
+    if (!femaleEarningPerMinute) {
       return res.status(400).json({
         success: false,
-        message: 'Admin margin per minute for agency females not configured'
+        message: 'Female call rate not set for this call type'
       });
     }
     
-    if (adminConfig.marginNonAgencyPerMinute === undefined || adminConfig.marginNonAgencyPerMinute === null) {
-      return res.status(400).json({
-        success: false,
-        message: 'Admin margin per minute for non-agency females not configured'
-      });
-    }
+    // No need to check minCallCoins here as validation happens at startCall
+    // Apply minimum billable duration rule
+    const MIN_BILLABLE_SECONDS = 30;
+    const billableSeconds = duration < MIN_BILLABLE_SECONDS ? MIN_BILLABLE_SECONDS : duration;
     
-    // Get female earning rate per minute and convert to per second
-    if (!receiver.coinsPerMinute) {
-      return res.status(400).json({
-        success: false,
-        message: 'Female call rate not set'
-      });
-    }
-    
-    const femaleEarningPerSecond = receiver.coinsPerMinute / 60;
-    
-    // Get platform margin per minute and convert to per second (isAgencyFemale already defined above)
-    const platformMarginPerMinute = isAgencyFemale 
-      ? adminConfig.marginAgencyPerMinute
-      : adminConfig.marginNonAgencyPerMinute;
-    
-    const platformMarginPerSecond = platformMarginPerMinute / 60;
-    
-    // Calculate male pay rate per second
-    const malePayPerSecond = femaleEarningPerSecond + platformMarginPerSecond;
-    
-    // Get minimum call coins setting from admin config
-    if (adminConfig.minCallCoins === undefined || adminConfig.minCallCoins === null) {
-      return res.status(400).json({
-        success: false,
-        message: 'Minimum call coins not configured by admin'
-      });
-    }
-    const minCallCoins = adminConfig.minCallCoins;
-
-    // Calculate maximum possible seconds based on current balance
-    const maxSeconds = Math.floor(caller.coinBalance / malePayPerSecond);
-    
-    // Check if user has enough coins for the requested duration
+    // Check if user has enough coins for the billable duration
     // If not, reject the call entirely rather than adjusting the duration
-    const requestedMalePay = duration * malePayPerSecond;
+    const requestedMalePay = Math.ceil(billableSeconds * malePayPerSecond);
     
     if (caller.coinBalance < requestedMalePay) {
+      // Mark the call session as inactive before returning error
+      await CallSession.updateOne({ callId }, { isActive: false });
+      
       // For failed calls, no earnings should be recorded
       const adminEarned = 0;
       const agencyEarned = 0;
@@ -308,10 +335,10 @@ exports.endCall = async (req, res) => {
         callerId,
         receiverId,
         duration,
-        femaleEarningPerMinute: receiver.coinsPerMinute,
-        platformMarginPerMinute: platformMarginPerMinute,
-        femaleEarningPerSecond,
-        platformMarginPerSecond,
+        femaleEarningPerMinute: femaleEarningPerMinute,
+        platformMarginPerMinute: platformMarginPerMinute, // Use frozen value from session
+        femaleEarningPerSecond: femaleRatePerSecond,
+        platformMarginPerSecond: platformRatePerSecond,
         totalCoins: 0, // No coins actually spent
         femaleEarning,
         platformMargin,
@@ -335,17 +362,30 @@ exports.endCall = async (req, res) => {
       });
     }
     
-    // If we get here, user has enough coins for the full duration
-    const billableSeconds = duration;
+    // Calculate amounts with single rounding point to prevent coin leakage
+    const malePay = Math.ceil(billableSeconds * malePayPerSecond);
+    const femaleEarning = Math.floor(malePay * (femaleRatePerSecond / malePayPerSecond));
+    const platformMargin = malePay - femaleEarning;
     
-    // Calculate amounts for each party
-    const femaleEarning = billableSeconds * femaleEarningPerSecond;
-    const platformMargin = billableSeconds * platformMarginPerSecond;
-    const malePay = femaleEarning + platformMargin;
+    // Deduct coins from male user atomically to prevent race conditions
+    const updatedCaller = await MaleUser.findOneAndUpdate(
+      { _id: callerId, coinBalance: { $gte: malePay } },
+      { $inc: { coinBalance: -malePay } },
+      { new: true }
+    );
     
-    // Deduct coins from male user
-    caller.coinBalance -= malePay;
-    await caller.save();
+    if (!updatedCaller) {
+      // Mark the call session as inactive before returning error
+      await CallSession.updateOne({ callId }, { isActive: false });
+      
+      return res.status(400).json({
+        success: false,
+        message: 'Insufficient balance or balance changed. Please retry.'
+      });
+    }
+    
+    // Update caller reference to the updated document
+    caller = updatedCaller;
 
     // Credit earnings to female user's wallet balance (real money she can withdraw)
     receiver.walletBalance = (receiver.walletBalance || 0) + femaleEarning;
@@ -358,6 +398,9 @@ exports.endCall = async (req, res) => {
     if (isAgencyFemale) {
       // For agency females, split the platform margin
       if (adminConfig.adminSharePercentage === undefined || adminConfig.adminSharePercentage === null) {
+        // Mark the call session as inactive before returning error
+        await CallSession.updateOne({ callId }, { isActive: false });
+        
         return res.status(400).json({
           success: false,
           message: 'Admin share percentage not configured'
@@ -373,15 +416,22 @@ exports.endCall = async (req, res) => {
       agencyEarned = 0;
     }
     
+    // Mark the call session as inactive
+    await CallSession.updateOne(
+      { callId },
+      { isActive: false }
+    );
+    
     // Create call history record
     const callRecord = await CallHistory.create({
       callerId,
       receiverId,
-      duration: billableSeconds,
-      femaleEarningPerMinute: receiver.coinsPerMinute,
-      platformMarginPerMinute: platformMarginPerMinute,
-      femaleEarningPerSecond,
-      platformMarginPerSecond,
+      duration: duration, // Store actual duration
+      billableDuration: billableSeconds, // Store billable duration
+      femaleEarningPerMinute: femaleEarningPerMinute,
+      platformMarginPerMinute: platformMarginPerMinute, // Use frozen value from session
+      femaleEarningPerSecond: femaleRatePerSecond,
+      platformMarginPerSecond: platformRatePerSecond,
       totalCoins: malePay,
       femaleEarning,
       platformMargin,
@@ -458,9 +508,10 @@ exports.endCall = async (req, res) => {
       message: messages.CALL.CALL_ENDED_SUCCESS,
       data: {
         callId: callRecord._id,
-        duration: billableSeconds,
-        femaleEarningPerSecond,
-        platformMarginPerSecond,
+        duration: duration, // Actual duration
+        billableDuration: billableSeconds, // Billable duration
+        femaleEarningPerSecond: femaleRatePerSecond,
+        platformMarginPerSecond: platformRatePerSecond,
         totalCoins: malePay,
         coinsDeducted: malePay,
         femaleEarning,

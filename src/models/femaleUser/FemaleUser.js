@@ -74,8 +74,12 @@ const femaleUserSchema = new mongoose.Schema({
   missedCalls: { type: Number, default: 0 },
   walletBalance: { type: Number, default: 0 },
   coinBalance: { type: Number, default: 0 },
-  // Call rate system
-  coinsPerMinute: { type: Number, default: 0 }, // Rate per minute (source of truth)
+  // Level-based call rate system
+  currentLevel: { type: Number, default: 1 }, // Current level based on weekly earnings
+  audioCoinsPerMinute: { type: Number, default: 0 }, // Audio call rate per minute (set by level config)
+  videoCoinsPerMinute: { type: Number, default: 0 }, // Video call rate per minute (set by level config)
+  weeklyEarnings: { type: Number, default: 0 }, // Current week's earnings for level calculation
+  lastLevelEvaluatedAt: { type: Date }, // Last time the user's level was evaluated by cron job
   // Location fields
   latitude: { type: Number },
   longitude: { type: Number },

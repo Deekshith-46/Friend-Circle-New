@@ -15,6 +15,13 @@ router.post('/toggle-status', auth, dynamicPermissionCheck, parser.none(), contr
 // Wallet/Coin operations for a user (accepts JSON or form-data)
 router.post('/operate-balance', auth, dynamicPermissionCheck, parser.none(), controller.operateBalance);
 
+// Level configuration routes
+router.post('/level-config', auth, dynamicPermissionCheck, parser.none(), controller.createUpdateLevelConfig);
+router.get('/level-config', auth, dynamicPermissionCheck, controller.getAllLevelConfigs);
+router.put('/level-config/:id', auth, dynamicPermissionCheck, parser.none(), controller.updateLevelConfig);
+router.delete('/level-config/:id', auth, dynamicPermissionCheck, controller.deleteLevelConfig);
+router.post('/set-call-rates', auth, dynamicPermissionCheck, parser.none(), controller.setFemaleCallRates);
+
 // List transactions for a user with optional filters
 router.get('/:userType/:userId/transactions', auth, dynamicPermissionCheck, controller.listTransactions);
 

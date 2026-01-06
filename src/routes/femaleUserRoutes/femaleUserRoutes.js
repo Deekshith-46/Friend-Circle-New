@@ -10,6 +10,8 @@ const callEarningsController = require('../../controllers/femaleUserControllers/
 const giftController = require('../../controllers/femaleUserControllers/giftController');
 const statsController = require('../../controllers/femaleUserControllers/statsController');
 const kycController = require('../../controllers/femaleUserControllers/kycController');
+const femaleUserLevelController = require('../../controllers/femaleUserControllers/femaleUserLevelController');
+const { validateLevelRate } = require('../../middlewares/levelRateValidationMiddleware');
 const blockListController = require('../../controllers/femaleUserControllers/blockListController');
 const { parser, videoParser, profileParser } = require('../../config/multer');
 const Transaction = require('../../models/common/Transaction');
@@ -125,11 +127,20 @@ router.patch('/update-video', auth, requireReviewAccepted, videoParser.single('v
 // Delete video
 router.delete('/video', auth, requireReviewAccepted, femaleUserController.deleteVideo);
 
+// Update earning rate (coinsPerMinute) only - LEGACY ROUTE (kept for compatibility)
+router.patch('/earning-rate', auth, requireReviewAccepted, upload.none(), femaleUserController.updateEarningRate);
+
+// Level-based call rate system routes
+router.get('/call-rate-settings', auth, requireReviewAccepted, femaleUserLevelController.getCallRateSettings);
+router.get('/level-info', auth, requireReviewAccepted, femaleUserLevelController.getLevelInfo);
+router.patch('/call-rates', auth, requireReviewAccepted, validateLevelRate, upload.none(), femaleUserLevelController.updateCallRates);
+router.post('/calculate-level', auth, requireReviewAccepted, femaleUserLevelController.calculateLevel);
+router.get('/levels', auth, requireReviewAccepted, femaleUserLevelController.getAllLevels);
+
 // Delete preference item (hobbies, sports, film, music, travel)
 router.delete('/preferences/:type/:itemId', auth, requireReviewAccepted, femaleUserController.deletePreferenceItem);
 
 // Update user interests
-router.patch('/interests', auth, requireReviewAccepted, femaleUserController.updateInterests);
 
 // Update user languages
 router.patch('/languages', auth, requireReviewAccepted, femaleUserController.updateLanguages);

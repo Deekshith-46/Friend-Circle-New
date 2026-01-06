@@ -5,18 +5,7 @@ const adminConfigSchema = new mongoose.Schema({
     type: Number, 
     default: null,
     min: 0
-  },
-  // Call margin settings (per minute - source of truth)
-  marginAgencyPerMinute: { // Platform margin per minute for agency females
-    type: Number,
-    default: null, // Must be explicitly set by admin
-    min: 0
-  },
-  marginNonAgencyPerMinute: { // Platform margin per minute for non-agency females
-    type: Number,
-    default: null, // Must be explicitly set by admin
-    min: 0
-  },
+  }, // Fallback minimum coins (now primarily using minimum billable duration logic)
   // Legacy fields (will be deprecated)
   marginAgency: { // Platform margin per second for agency females (deprecated)
     type: Number,

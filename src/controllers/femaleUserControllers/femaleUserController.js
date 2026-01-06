@@ -995,6 +995,7 @@ exports.updateUserInfo = async (req, res) => {
     const film = parseFormValue(req.body.film);
     const music = parseFormValue(req.body.music);
     const travel = parseFormValue(req.body.travel);
+    const coinsPerMinute = parseFormValue(req.body.coinsPerMinute);
 
     console.log('📥 Parsed values:', { name, age, bio, travel, hobbies, sports, film, music });
 
@@ -1101,6 +1102,14 @@ exports.updateUserInfo = async (req, res) => {
         const existingIds = (user.travel || []).map(t => t.id);
         const uniqueNew = newTravel.filter(t => !existingIds.includes(t.id));
         user.travel = [...(user.travel || []), ...uniqueNew];
+      }
+    }
+    
+    // Update coinsPerMinute if provided and validate
+    if (coinsPerMinute !== undefined) {
+      const rate = Number(coinsPerMinute);
+      if (!isNaN(rate) && rate >= 0) {
+        user.coinsPerMinute = rate;
       }
     }
     

@@ -30,7 +30,12 @@ const callHistorySchema = new mongoose.Schema({
     type: Number, 
     required: true,
     min: 0 
-  }, // Duration in seconds
+  }, // Actual duration in seconds
+  billableDuration: { 
+    type: Number, 
+    required: true,
+    min: 0 
+  }, // Billable duration in seconds (with minimum applied)
   
   // Coin Details - Updated for new architecture
   femaleEarningPerMinute: { 

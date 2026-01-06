@@ -175,6 +175,7 @@ module.exports = {
     AGENCY_KYC_NOT_FOUND: "Agency KYC not found",
     USER_DELETED_SUCCESS: (userType) => `${userType} user deleted successfully`,
     CALL_RATE_UPDATED: (name, email) => `Call rate updated successfully for ${name || email}`,
+    CALL_RATES_UPDATED: (name, email) => `Call rates updated successfully for ${name || email}`,
     USER_ID_REQUIRED: "userId is required",
     COINS_PER_SECOND_REQUIRED: "coinsPerSecond is required",
     COINS_PER_SECOND_INVALID: "coinsPerSecond must be a valid non-negative number"

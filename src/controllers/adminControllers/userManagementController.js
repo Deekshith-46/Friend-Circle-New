@@ -5,6 +5,7 @@ const Transaction = require('../../models/common/Transaction');
 const AgencyUser = require('../../models/agency/AgencyUser');
 const mongoose = require('mongoose');
 const { isValidEmail, isValidMobile } = require('../../validations/validations');
+const AdminLevelConfig = require('../../models/admin/AdminLevelConfig');
 const messages = require('../../validations/messages');
 
 // Utility function to clean up invalid interests and languages references for a user
@@ -684,4 +685,495 @@ exports.setFemaleCallRate = async (req, res) => {
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
     }
+};
+
+// Create or update level configuration
+exports.createUpdateLevelConfig = async (req, res) => {
+  try {
+    const {
+      level,
+      weeklyEarningsMin,
+      weeklyEarningsMax,
+      audioRateRange,
+      videoRateRange,
+      audioRatePerMinute,
+      videoRatePerMinute,
+      platformMarginPerMinute,
+      isActive
+    } = req.body;
+    
+    // Check if using new schema (fixed rates) or old schema (ranges)
+    if (!level || weeklyEarningsMin === undefined || weeklyEarningsMax === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: level, weeklyEarningsMin, weeklyEarningsMax'
+      });
+    }
+    
+    // Validate numeric values for required fields
+    if (isNaN(level) || isNaN(weeklyEarningsMin) || isNaN(weeklyEarningsMax)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Required values (level, weeklyEarningsMin, weeklyEarningsMax) must be numbers'
+      });
+    }
+    
+    // Validate ranges for required fields
+    if (weeklyEarningsMin < 0 || weeklyEarningsMax < 0 || weeklyEarningsMin > weeklyEarningsMax) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid weekly earnings range'
+      });
+    }
+    
+    // Determine which schema to use
+    let configData;
+    if (audioRatePerMinute !== undefined && videoRatePerMinute !== undefined && platformMarginPerMinute) {
+      // New schema with fixed rates
+      if (isNaN(audioRatePerMinute) || isNaN(videoRatePerMinute)) {
+        return res.status(400).json({
+          success: false,
+          message: 'audioRatePerMinute and videoRatePerMinute must be numbers'
+        });
+      }
+      
+      if (audioRatePerMinute < 0 || videoRatePerMinute < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'audioRatePerMinute and videoRatePerMinute must be non-negative numbers'
+        });
+      }
+      
+      // Validate platformMarginPerMinute structure
+      if (typeof platformMarginPerMinute !== 'object' || 
+          platformMarginPerMinute.nonAgency === undefined || 
+          platformMarginPerMinute.agency === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: 'platformMarginPerMinute must be an object with nonAgency and agency properties'
+        });
+      }
+      
+      if (isNaN(platformMarginPerMinute.nonAgency) || isNaN(platformMarginPerMinute.agency)) {
+        return res.status(400).json({
+          success: false,
+          message: 'platformMarginPerMinute values must be numbers'
+        });
+      }
+      
+      if (platformMarginPerMinute.nonAgency < 0 || platformMarginPerMinute.agency < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'platformMarginPerMinute values must be non-negative numbers'
+        });
+      }
+      
+      configData = {
+        level: Number(level),
+        weeklyEarningsMin: Number(weeklyEarningsMin),
+        weeklyEarningsMax: Number(weeklyEarningsMax),
+        audioRatePerMinute: Number(audioRatePerMinute),
+        videoRatePerMinute: Number(videoRatePerMinute),
+        platformMarginPerMinute: {
+          nonAgency: Number(platformMarginPerMinute.nonAgency),
+          agency: Number(platformMarginPerMinute.agency)
+        },
+        isActive: isActive !== undefined ? isActive : true
+      };
+    } else if (audioRateRange && audioRateRange.min !== undefined && audioRateRange.max !== undefined &&
+               videoRateRange && videoRateRange.min !== undefined && videoRateRange.max !== undefined) {
+      // Old schema with ranges
+      if (isNaN(audioRateRange.min) || isNaN(audioRateRange.max) ||
+          isNaN(videoRateRange.min) || isNaN(videoRateRange.max)) {
+        return res.status(400).json({
+          success: false,
+          message: 'All rate range values must be numbers'
+        });
+      }
+      
+      if (audioRateRange.min < 0 || audioRateRange.max < 0 || audioRateRange.min > audioRateRange.max ||
+          videoRateRange.min < 0 || videoRateRange.max < 0 || videoRateRange.min > videoRateRange.max) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid rate ranges'
+        });
+      }
+      
+      configData = {
+        level: Number(level),
+        weeklyEarningsMin: Number(weeklyEarningsMin),
+        weeklyEarningsMax: Number(weeklyEarningsMax),
+        audioRateRange: {
+          min: Number(audioRateRange.min),
+          max: Number(audioRateRange.max)
+        },
+        videoRateRange: {
+          min: Number(videoRateRange.min),
+          max: Number(videoRateRange.max)
+        },
+        isActive: isActive !== undefined ? isActive : true
+      };
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: 'Either provide audioRatePerMinute and videoRatePerMinute with platformMarginPerMinute (new schema) or audioRateRange and videoRateRange with min/max (old schema)'
+      });
+    }
+    
+    const config = await AdminLevelConfig.findOneAndUpdate(
+      { level },
+      configData,
+      { upsert: true, new: true }
+    );
+    
+    return res.json({
+      success: true,
+      message: `Level configuration ${config.isNew ? 'created' : 'updated'} successfully`,
+      data: config
+    });
+  } catch (err) {
+    console.error('Error in createUpdateLevelConfig:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// Get all level configurations
+exports.getAllLevelConfigs = async (req, res) => {
+  try {
+    const configs = await AdminLevelConfig.find().sort({ level: 1 });
+    
+    return res.json({
+      success: true,
+      data: configs
+    });
+  } catch (err) {
+    console.error('Error in getAllLevelConfigs:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// Delete level configuration
+exports.deleteLevelConfig = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID is required'
+      });
+    }
+    
+    const config = await AdminLevelConfig.findByIdAndDelete(id);
+    
+    if (!config) {
+      return res.status(404).json({
+        success: false,
+        message: 'Level configuration not found'
+      });
+    }
+    
+    return res.json({
+      success: true,
+      message: 'Level configuration deleted successfully',
+      data: config
+    });
+  } catch (err) {
+    console.error('Error in deleteLevelConfig:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// Update specific level configuration
+exports.updateLevelConfig = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      level,
+      weeklyEarningsMin,
+      weeklyEarningsMax,
+      audioRateRange,
+      videoRateRange,
+      audioRatePerMinute,
+      videoRatePerMinute,
+      platformMarginPerMinute,
+      isActive
+    } = req.body;
+    
+    // Validate required fields
+    if (id === undefined || id === null) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID parameter is required'
+      });
+    }
+    
+    // Build update object with only provided fields
+    const updateData = {};
+    
+    if (level !== undefined) {
+      updateData.level = Number(level);
+    }
+    if (weeklyEarningsMin !== undefined) {
+      updateData.weeklyEarningsMin = Number(weeklyEarningsMin);
+    }
+    if (weeklyEarningsMax !== undefined) {
+      updateData.weeklyEarningsMax = Number(weeklyEarningsMax);
+    }
+    if (audioRatePerMinute !== undefined) {
+      updateData.audioRatePerMinute = Number(audioRatePerMinute);
+    }
+    if (videoRatePerMinute !== undefined) {
+      updateData.videoRatePerMinute = Number(videoRatePerMinute);
+    }
+    if (platformMarginPerMinute !== undefined) {
+      if (typeof platformMarginPerMinute === 'object') {
+        if (platformMarginPerMinute.nonAgency !== undefined) {
+          updateData['platformMarginPerMinute.nonAgency'] = Number(platformMarginPerMinute.nonAgency);
+        }
+        if (platformMarginPerMinute.agency !== undefined) {
+          updateData['platformMarginPerMinute.agency'] = Number(platformMarginPerMinute.agency);
+        }
+      }
+    }
+    if (audioRateRange !== undefined) {
+      if (audioRateRange.min !== undefined) {
+        updateData['audioRateRange.min'] = Number(audioRateRange.min);
+      }
+      if (audioRateRange.max !== undefined) {
+        updateData['audioRateRange.max'] = Number(audioRateRange.max);
+      }
+    }
+    if (videoRateRange !== undefined) {
+      if (videoRateRange.min !== undefined) {
+        updateData['videoRateRange.min'] = Number(videoRateRange.min);
+      }
+      if (videoRateRange.max !== undefined) {
+        updateData['videoRateRange.max'] = Number(videoRateRange.max);
+      }
+    }
+    if (isActive !== undefined) {
+      updateData.isActive = isActive;
+    }
+    
+    // Validate numeric values if provided
+    if (updateData.level !== undefined && (isNaN(updateData.level) || updateData.level <= 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'level must be a valid positive number'
+      });
+    }
+    
+    if (updateData.weeklyEarningsMin !== undefined && (isNaN(updateData.weeklyEarningsMin) || updateData.weeklyEarningsMin < 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'weeklyEarningsMin must be a valid non-negative number'
+      });
+    }
+    
+    if (updateData.weeklyEarningsMax !== undefined && (isNaN(updateData.weeklyEarningsMax) || updateData.weeklyEarningsMax < 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'weeklyEarningsMax must be a valid non-negative number'
+      });
+    }
+    
+    if (updateData.audioRatePerMinute !== undefined && (isNaN(updateData.audioRatePerMinute) || updateData.audioRatePerMinute < 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'audioRatePerMinute must be a valid non-negative number'
+      });
+    }
+    
+    if (updateData.videoRatePerMinute !== undefined && (isNaN(updateData.videoRatePerMinute) || updateData.videoRatePerMinute < 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'videoRatePerMinute must be a valid non-negative number'
+      });
+    }
+    
+    if (updateData['platformMarginPerMinute.nonAgency'] !== undefined && (isNaN(updateData['platformMarginPerMinute.nonAgency']) || updateData['platformMarginPerMinute.nonAgency'] < 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'platformMarginPerMinute.nonAgency must be a valid non-negative number'
+      });
+    }
+    
+    if (updateData['platformMarginPerMinute.agency'] !== undefined && (isNaN(updateData['platformMarginPerMinute.agency']) || updateData['platformMarginPerMinute.agency'] < 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'platformMarginPerMinute.agency must be a valid non-negative number'
+      });
+    }
+    
+    if (updateData['audioRateRange.min'] !== undefined && (isNaN(updateData['audioRateRange.min']) || updateData['audioRateRange.min'] < 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'audioRateRange.min must be a valid non-negative number'
+      });
+    }
+    
+    if (updateData['audioRateRange.max'] !== undefined && (isNaN(updateData['audioRateRange.max']) || updateData['audioRateRange.max'] < 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'audioRateRange.max must be a valid non-negative number'
+      });
+    }
+    
+    if (updateData['videoRateRange.min'] !== undefined && (isNaN(updateData['videoRateRange.min']) || updateData['videoRateRange.min'] < 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'videoRateRange.min must be a valid non-negative number'
+      });
+    }
+    
+    if (updateData['videoRateRange.max'] !== undefined && (isNaN(updateData['videoRateRange.max']) || updateData['videoRateRange.max'] < 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'videoRateRange.max must be a valid non-negative number'
+      });
+    }
+    
+    // Validate ranges if both min and max are provided
+    if (updateData.weeklyEarningsMin !== undefined && updateData.weeklyEarningsMax !== undefined && 
+        updateData.weeklyEarningsMin > updateData.weeklyEarningsMax) {
+      return res.status(400).json({
+        success: false,
+        message: 'weeklyEarningsMin cannot be greater than weeklyEarningsMax'
+      });
+    }
+    
+    if (updateData['audioRateRange.min'] !== undefined && updateData['audioRateRange.max'] !== undefined &&
+        updateData['audioRateRange.min'] > updateData['audioRateRange.max']) {
+      return res.status(400).json({
+        success: false,
+        message: 'audioRateRange.min cannot be greater than audioRateRange.max'
+      });
+    }
+    
+    if (updateData['videoRateRange.min'] !== undefined && updateData['videoRateRange.max'] !== undefined &&
+        updateData['videoRateRange.min'] > updateData['videoRateRange.max']) {
+      return res.status(400).json({
+        success: false,
+        message: 'videoRateRange.min cannot be greater than videoRateRange.max'
+      });
+    }    
+    const config = await AdminLevelConfig.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true }
+    );
+    
+    if (!config) {
+      return res.status(404).json({
+        success: false,
+        message: 'Level configuration not found'
+      });
+    }
+    
+    return res.json({
+      success: true,
+      message: 'Level configuration updated successfully',
+      data: config
+    });
+  } catch (err) {
+    console.error('Error in updateLevelConfig:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// Update female user call rates (new method for level-based system)
+exports.setFemaleCallRates = async (req, res) => {
+  try {
+    const { userId, audioCoinsPerMinute, videoCoinsPerMinute } = req.body;
+    
+    if (!userId) {
+      return res.status(400).json({ success: false, message: messages.USER_MANAGEMENT.USER_ID_REQUIRED });
+    }
+    
+    // Get user to validate existence and get level
+    const femaleUser = await FemaleUser.findById(userId);
+    if (!femaleUser) {
+      return res.status(404).json({ success: false, message: messages.COMMON.USER_NOT_FOUND });
+    }
+    
+    // Get level configuration to validate rates
+    const levelConfig = await AdminLevelConfig.findOne({ 
+      level: femaleUser.currentLevel, 
+      isActive: true 
+    });
+    
+    if (!levelConfig) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Level configuration not found for user level' 
+      });
+    }
+    
+    // Validate audio rate if provided
+    if (audioCoinsPerMinute !== undefined) {
+      const rate = Number(audioCoinsPerMinute);
+      
+      // Check if using new schema (fixed rates) or old schema (ranges)
+      if (levelConfig.audioRatePerMinute !== undefined) {
+        // New schema: check against fixed rate
+        if (isNaN(rate) || rate !== levelConfig.audioRatePerMinute) {
+          return res.status(400).json({ 
+            success: false, 
+            message: `Audio rate must match the fixed rate of ${levelConfig.audioRatePerMinute} coins per minute for level ${levelConfig.level}` 
+          });
+        }
+      } else {
+        // Old schema: check against range
+        if (isNaN(rate) || rate < levelConfig.audioRateRange.min || rate > levelConfig.audioRateRange.max) {
+          return res.status(400).json({ 
+            success: false, 
+            message: `Audio rate must be between ${levelConfig.audioRateRange.min} and ${levelConfig.audioRateRange.max} coins per minute` 
+          });
+        }
+      }
+      femaleUser.audioCoinsPerMinute = rate;
+    }
+    
+    // Validate video rate if provided
+    if (videoCoinsPerMinute !== undefined) {
+      const rate = Number(videoCoinsPerMinute);
+      
+      // Check if using new schema (fixed rates) or old schema (ranges)
+      if (levelConfig.videoRatePerMinute !== undefined) {
+        // New schema: check against fixed rate
+        if (isNaN(rate) || rate !== levelConfig.videoRatePerMinute) {
+          return res.status(400).json({ 
+            success: false, 
+            message: `Video rate must match the fixed rate of ${levelConfig.videoRatePerMinute} coins per minute for level ${levelConfig.level}` 
+          });
+        }
+      } else {
+        // Old schema: check against range
+        if (isNaN(rate) || rate < levelConfig.videoRateRange.min || rate > levelConfig.videoRateRange.max) {
+          return res.status(400).json({ 
+            success: false, 
+            message: `Video rate must be between ${levelConfig.videoRateRange.min} and ${levelConfig.videoRateRange.max} coins per minute` 
+          });
+        }
+      }
+      femaleUser.videoCoinsPerMinute = rate;
+    }
+    
+    await femaleUser.save();
+    
+    return res.json({
+      success: true,
+      message: messages.USER_MANAGEMENT.CALL_RATES_UPDATED(femaleUser.name, femaleUser.email),
+      data: {
+        userId: femaleUser._id,
+        name: femaleUser.name,
+        email: femaleUser.email,
+        audioCoinsPerMinute: femaleUser.audioCoinsPerMinute,
+        videoCoinsPerMinute: femaleUser.videoCoinsPerMinute
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
 };
