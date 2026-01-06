@@ -66,6 +66,13 @@ const adminConfigSchema = new mongoose.Schema({
     default: 'km', // km or meters
     enum: ['m', 'km']
   },
+  // New user window settings
+  newUserWindowDays: { 
+    type: Number, 
+    default: 7, // Default 7 days for new users
+    min: 1,
+    max: 365
+  },
   // Other global settings can be added here in the future
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }

@@ -1763,10 +1763,11 @@ exports.getDashboard = async (req, res) => {
       });
     }
     
-    // Get admin config for nearby distance settings
+    // Get admin config for nearby distance settings and new user window
     const adminConfig = await AdminConfig.getConfig();
     const nearbyDistanceValue = adminConfig.nearbyDistanceValue || 5; // Default 5 km
     const nearbyDistanceUnit = adminConfig.nearbyDistanceUnit || 'km'; // Default km
+    const newUserWindowDays = adminConfig.newUserWindowDays || 7; // Default 7 days for new users
     
     // Base filter for all female users
     const baseFilter = {
@@ -1877,18 +1878,18 @@ exports.getDashboard = async (req, res) => {
         break;
         
       case 'new':
-        // Get females who registered recently (last 7 days)
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        // Get females who registered recently within the configured window
+        const newWindowDate = new Date();
+        newWindowDate.setDate(newWindowDate.getDate() - newUserWindowDays);
         
         const newFilter = {
           ...baseFilter,
-          createdAt: { $gte: sevenDaysAgo }
+          createdAt: { $gte: newWindowDate }
         };
         
         [results, total] = await Promise.all([
           FemaleUser.find(newFilter)
-            .select('_id name age gender bio images onlineStatus hideAge')
+            .select('_id name age gender bio images onlineStatus hideAge createdAt')
             .populate({ path: 'images', select: 'imageUrl' })
             .sort({ createdAt: -1 }) // Newest first
             .skip(skip)
@@ -1932,6 +1933,11 @@ exports.getDashboard = async (req, res) => {
         );
         response.distance = Math.round(distance * 100) / 100; // Round to 2 decimal places
         response.distanceUnit = 'km';
+      }
+      
+      // Add registration date for new section
+      if (section.toLowerCase() === 'new') {
+        response.registeredAt = female.createdAt;
       }
       
       return response;

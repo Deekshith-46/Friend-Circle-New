@@ -627,3 +627,62 @@ exports.getNearbyDistance = async (req, res) => {
     });
   }
 };
+
+// Update new user window days
+exports.updateNewUserWindowDays = async (req, res) => {
+  try {
+    const { newUserWindowDays } = req.body;
+    
+    // Validate input
+    if (newUserWindowDays === undefined || newUserWindowDays === null) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'newUserWindowDays is required' 
+      });
+    }
+    
+    const numericValue = Number(newUserWindowDays);
+    if (!Number.isFinite(numericValue) || numericValue < 1 || numericValue > 365) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'newUserWindowDays must be a valid number between 1 and 365' 
+      });
+    }
+    
+    // Get or create config and update newUserWindowDays
+    let config = await AdminConfig.getConfig();
+    config.newUserWindowDays = numericValue;
+    await config.save();
+    
+    return res.json({
+      success: true,
+      message: 'New user window days updated successfully',
+      data: {
+        newUserWindowDays: config.newUserWindowDays
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ 
+      success: false, 
+      error: err.message 
+    });
+  }
+};
+
+// Get new user window days
+exports.getNewUserWindowDays = async (req, res) => {
+  try {
+    const config = await AdminConfig.getConfig();
+    return res.json({
+      success: true,
+      data: {
+        newUserWindowDays: config.newUserWindowDays
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ 
+      success: false, 
+      error: err.message 
+    });
+  }
+};
