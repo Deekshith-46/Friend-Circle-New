@@ -23,9 +23,7 @@ router.post('/config/referral-bonus', auth, dynamicPermissionCheck, parser.none(
 router.put('/config/referral-bonus', auth, dynamicPermissionCheck, parser.none(), controller.updateReferralBonus);
 router.delete('/config/referral-bonus', auth, dynamicPermissionCheck, controller.deleteReferralBonus);
 
-// Call Margin Routes
-router.post('/config/margin-agency', auth, dynamicPermissionCheck, parser.none(), controller.updateMarginAgency);
-router.post('/config/margin-non-agency', auth, dynamicPermissionCheck, parser.none(), controller.updateMarginNonAgency);
+// Admin Share Percentage Route
 router.post('/config/admin-share-percentage', auth, dynamicPermissionCheck, parser.none(), controller.updateAdminSharePercentage);
 
 // Nearby Distance Routes

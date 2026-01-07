@@ -530,23 +530,99 @@ exports.endCall = async (req, res) => {
   }
 };
 
-// Get call history for male user
+// Get call history for user (works for both male and female users)
 exports.getCallHistory = async (req, res) => {
   try {
     const userId = req.user._id;
     const { limit = 50, skip = 0 } = req.query;
 
-    const calls = await CallHistory.find({ callerId: userId })
-      .populate('receiverId', 'name email profilePicture')
+    // Find calls where the user is either caller or receiver
+    const calls = await CallHistory.find({
+      $or: [
+        { callerId: userId },
+        { receiverId: userId }
+      ]
+    })
       .sort({ createdAt: -1 })
       .limit(parseInt(limit))
       .skip(parseInt(skip));
 
-    const total = await CallHistory.countDocuments({ callerId: userId });
+    // Transform the calls to include user details
+    const transformedCalls = await Promise.all(calls.map(async (call) => {
+      // Determine the other user based on the current user's role
+      let otherUser;
+      let otherUserId;
+      let otherUserType;
+      let profileImageUrl = null;
+      
+      if (call.callerId.toString() === userId.toString()) {
+        // Current user (male) is caller, other user is receiver (female)
+        otherUser = await FemaleUser.findById(call.receiverId).select('name images');
+        otherUserId = call.receiverId;
+        otherUserType = 'female';
+        
+        // Get the first image as profile picture
+        if (otherUser && otherUser.images && otherUser.images.length > 0) {
+          const firstImageId = otherUser.images[0];
+          const FemaleImage = require('../../models/femaleUser/Image');
+          const imageDoc = await FemaleImage.findById(firstImageId);
+          if (imageDoc) {
+            profileImageUrl = imageDoc.imageUrl;
+          }
+        }
+      } else {
+        // Current user (male) is receiver, other user is caller (male)
+        otherUser = await MaleUser.findById(call.callerId).select('firstName lastName images');
+        otherUserId = call.callerId;
+        otherUserType = 'male';
+        
+        // Get the first image as profile picture
+        if (otherUser && otherUser.images && otherUser.images.length > 0) {
+          const firstImageId = otherUser.images[0];
+          const MaleImage = require('../../models/maleUser/Image');
+          const imageDoc = await MaleImage.findById(firstImageId);
+          if (imageDoc) {
+            profileImageUrl = imageDoc.imageUrl;
+          }
+        }
+      }
+      
+      // Build the name properly for both male and female users
+      let userName = 'Unknown User';
+      if (otherUser) {
+        if (otherUserType === 'male') {
+          // Male users have firstName and lastName
+          userName = `${otherUser.firstName || ''} ${otherUser.lastName || ''}`.trim();
+          if (!userName) userName = 'Unknown User';
+        } else {
+          // Female users have name field
+          userName = otherUser.name || 'Unknown User';
+        }
+      }
+      
+      return {
+        userId: otherUserId,
+        name: userName,
+        profileImage: profileImageUrl,
+        callType: call.callType,
+        status: call.status,
+        duration: call.status === 'completed' ? call.duration : 0,
+        billableDuration: call.status === 'completed' ? call.billableDuration : 0,
+        createdAt: call.createdAt,
+        callId: call._id
+      };
+    }));
+
+    const total = await CallHistory.countDocuments({
+      $or: [
+        { callerId: userId },
+        { receiverId: userId }
+      ]
+    });
 
     return res.json({
       success: true,
-      data: calls,
+      data: transformedCalls,
       pagination: {
         total,
         limit: parseInt(limit),

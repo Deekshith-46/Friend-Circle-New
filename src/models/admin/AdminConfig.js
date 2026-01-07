@@ -6,15 +6,6 @@ const adminConfigSchema = new mongoose.Schema({
     default: null,
     min: 0
   }, // Fallback minimum coins (now primarily using minimum billable duration logic)
-  // Legacy fields (will be deprecated)
-  marginAgency: { // Platform margin per second for agency females (deprecated)
-    type: Number,
-    default: null
-  },
-  marginNonAgency: { // Platform margin per second for non-agency females (deprecated)
-    type: Number,
-    default: null
-  },
   adminSharePercentage: { // Percentage of platform margin that goes to admin
     type: Number,
     default: null, // Must be explicitly set by admin

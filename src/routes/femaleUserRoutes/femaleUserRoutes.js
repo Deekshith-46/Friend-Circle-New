@@ -225,4 +225,9 @@ router.post('/block', auth, requireReviewAccepted, blockListController.blockUser
 router.post('/unblock', auth, requireReviewAccepted, blockListController.unblockUser);
 router.get('/block-list', auth, requireReviewAccepted, blockListController.getBlockList);
 
+// Call Routes
+const callController = require('../../controllers/femaleUserControllers/callController');
+router.get('/calls/history', auth, requireReviewAccepted, callController.getCallHistory);
+router.get('/calls/stats', auth, requireReviewAccepted, callController.getCallStats);
+
 module.exports = router;
