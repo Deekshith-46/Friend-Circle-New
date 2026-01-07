@@ -75,7 +75,7 @@ const femaleUserSchema = new mongoose.Schema({
   walletBalance: { type: Number, default: 0 },
   coinBalance: { type: Number, default: 0 },
   // Level-based call rate system
-  currentLevel: { type: Number, default: 1 }, // Current level based on weekly earnings
+  currentLevel: { type: Number, default: 0 }, // Current level based on weekly earnings (0 = starter level)
   audioCoinsPerMinute: { type: Number, default: 0 }, // Audio call rate per minute (set by level config)
   videoCoinsPerMinute: { type: Number, default: 0 }, // Video call rate per minute (set by level config)
   weeklyEarnings: { type: Number, default: 0 }, // Current week's earnings for level calculation

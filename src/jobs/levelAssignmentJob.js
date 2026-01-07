@@ -71,7 +71,7 @@ const assignWeeklyLevels = async () => {
         const weeklyEarnings = await calculateWeeklyEarnings(user._id);
         
         // Find the appropriate level based on weekly earnings
-        let newLevel = 1; // Default to level 1 if no match found
+        let newLevel = 0; // Default to level 0 (starter level) if no match found
         
         for (const config of levelConfigs) {
           if (weeklyEarnings >= config.weeklyEarningsMin && weeklyEarnings <= config.weeklyEarningsMax) {

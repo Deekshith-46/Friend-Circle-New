@@ -5,7 +5,7 @@ const levelConfigSchema = new mongoose.Schema({
     type: Number,
     required: true,
     unique: true,
-    min: 1
+    min: 0
   },
   weeklyEarningsMin: {
     type: Number,

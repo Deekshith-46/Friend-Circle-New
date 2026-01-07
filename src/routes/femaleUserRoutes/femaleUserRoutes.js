@@ -133,7 +133,7 @@ router.patch('/earning-rate', auth, requireReviewAccepted, upload.none(), female
 // Level-based call rate system routes
 router.get('/call-rate-settings', auth, requireReviewAccepted, femaleUserLevelController.getCallRateSettings);
 router.get('/level-info', auth, requireReviewAccepted, femaleUserLevelController.getLevelInfo);
-router.patch('/call-rates', auth, requireReviewAccepted, validateLevelRate, upload.none(), femaleUserLevelController.updateCallRates);
+router.patch('/call-rates', auth, requireReviewAccepted, upload.none(), femaleUserLevelController.updateCallRates);
 router.post('/calculate-level', auth, requireReviewAccepted, femaleUserLevelController.calculateLevel);
 router.get('/levels', auth, requireReviewAccepted, femaleUserLevelController.getAllLevels);
 
