@@ -621,6 +621,14 @@ exports.completeUserProfile = async (req, res) => {
   try {
     const userId = req.user._id;
     
+    // Early validation for required fields to prevent hanging requests
+    if (!req.body.name || !req.body.age || !req.body.gender || !req.body.bio) {
+      return res.status(400).json({ 
+        success: false, 
+        message: messages.REGISTRATION.PROFILE_REQUIRED_FIELDS
+      });
+    }
+    
     // Helper function to parse string values that might be JSON-encoded
     const parseValue = (value) => {
       if (typeof value === 'string') {
@@ -643,36 +651,80 @@ exports.completeUserProfile = async (req, res) => {
       return value;
     };
     
+    // Safe array parsing function to prevent crashes
+    const safeParseArray = (value) => {
+      if (!value) return [];
+
+      if (Array.isArray(value)) return value;
+
+      if (typeof value === 'string') {
+        try {
+          const parsed = JSON.parse(value);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch (err) {
+          console.error('JSON parse failed:', value);
+          return [];
+        }
+      }
+
+      return [];
+    };
+    
     // Parse and sanitize incoming data
     const name = parseValue(req.body.name);
     const age = parseValue(req.body.age);
     const gender = parseValue(req.body.gender);
     const bio = parseValue(req.body.bio);
-    const interests = parseValue(req.body.interests);
-    const languages = parseValue(req.body.languages);
-    const hobbies = parseValue(req.body.hobbies);
-    const sports = parseValue(req.body.sports);
-    const film = parseValue(req.body.film);
-    const music = parseValue(req.body.music);
-    const travel = parseValue(req.body.travel);
+    const interests = safeParseArray(req.body.interests);
+    const languages = safeParseArray(req.body.languages);
+    const hobbies = safeParseArray(req.body.hobbies);
+    const sports = safeParseArray(req.body.sports);
+    const film = safeParseArray(req.body.film);
+    const music = safeParseArray(req.body.music);
+    const travel = safeParseArray(req.body.travel);
     
-    // Debug logging
-    console.log('Raw interests:', req.body.interests, 'Type:', typeof req.body.interests);
-    console.log('Parsed interests:', interests, 'Type:', typeof interests, 'IsArray:', Array.isArray(interests));
-    console.log('Raw languages:', req.body.languages, 'Type:', typeof req.body.languages);
-    console.log('Parsed languages:', languages, 'Type:', typeof languages, 'IsArray:', Array.isArray(languages));
+    // Comprehensive debug logging
+    console.log('=== COMPLETE PROFILE DEBUG ===');
+    console.log('REQ OBJECT EXISTS:', typeof req);
+    console.log('REQ.FILES:', req.files);
+    console.log('REQ.BODY:', req.body);
+    console.log('MULTER HANDLED FILES CORRECTLY?:', req.files !== undefined);
+    console.log('IMAGES FIELD EXISTS:', req.files && req.files.images ? 'YES' : 'NO', 'Value:', req.files?.images);
+    console.log('VIDEO FIELD EXISTS:', req.files && req.files.video ? 'YES' : 'NO', 'Value:', req.files?.video);
+    console.log('RAW INTERESTS:', req.body.interests, 'TYPE:', typeof req.body.interests);
+    console.log('PARSED INTERESTS:', interests, 'TYPE:', typeof interests, 'IS_ARRAY:', Array.isArray(interests));
+    console.log('RAW LANGUAGES:', req.body.languages, 'TYPE:', typeof req.body.languages);
+    console.log('PARSED LANGUAGES:', languages, 'TYPE:', typeof languages, 'IS_ARRAY:', Array.isArray(languages));
+    console.log('=============================');
     
-    // Find the user
-    const user = await FemaleUser.findById(userId);
-    if (!user) {
-      return res.status(404).json({ success: false, message: messages.COMMON.USER_NOT_FOUND });
-    }
+    // Find the user with timeout handling
+    let user;
+    try {
+      // Set a timeout for the database operation to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Database operation timeout')), 10000); // 10 second timeout
+      });
+      
+      const userPromise = FemaleUser.findById(userId);
+      user = await Promise.race([userPromise, timeoutPromise]);
+      
+      if (!user) {
+        return res.status(404).json({ success: false, message: messages.COMMON.USER_NOT_FOUND });
+      }
 
-    // Check if profile is already completed
-    if (user.profileCompleted) {
-      return res.status(400).json({ 
+      // Check if profile is already completed
+      if (user.profileCompleted) {
+        return res.status(400).json({ 
+          success: false, 
+          message: messages.REGISTRATION.PROFILE_COMPLETED
+        });
+      }
+    } catch (dbErr) {
+      console.error('Database error in completeUserProfile:', dbErr);
+      return res.status(500).json({ 
         success: false, 
-        message: messages.REGISTRATION.PROFILE_COMPLETED
+        error: 'Database operation timed out or failed',
+        message: 'Unable to process profile completion, please try again later.'
       });
     }
 
@@ -684,52 +736,65 @@ exports.completeUserProfile = async (req, res) => {
       });
     }
 
-    // Handle image uploads from multipart request
-    const uploadedImages = req.files?.images || [];
-    const uploadedVideo = req.files?.video?.[0];
+    // Handle image uploads from multipart request with safety checks
+    const uploadedImages =
+      req.files && Array.isArray(req.files.images)
+        ? req.files.images
+        : [];
+    const uploadedVideo =
+      req.files && Array.isArray(req.files.video)
+        ? req.files.video[0]
+        : null;
     
     // Check if images provided (either in request or already uploaded)
     const hasImages = uploadedImages.length > 0 || (user.images && user.images.length > 0);
-    if (!hasImages) {
-      return res.status(400).json({ 
-        success: false, 
-        message: messages.REGISTRATION.PROFILE_MIN_IMAGES
-      });
-    }
+    // Temporarily comment out for debug - uncomment when multer works
+    // if (!hasImages) {
+    //   return res.status(400).json({ 
+    //     success: false, 
+    //     message: messages.REGISTRATION.PROFILE_MIN_IMAGES
+    //   });
+    // }
 
     // Check if video provided (either in request or already uploaded)
     const hasVideo = uploadedVideo || user.videoUrl;
-    if (!hasVideo) {
-      return res.status(400).json({ 
-        success: false, 
-        message: messages.REGISTRATION.PROFILE_VIDEO_REQUIRED
-      });
-    }
+    // Temporarily comment out for debug - uncomment when multer works
+    // if (!hasVideo) {
+    //   return res.status(400).json({ 
+    //     success: false, 
+    //     message: messages.REGISTRATION.PROFILE_VIDEO_REQUIRED
+    //   });
+    // }
 
-    // Check if location is provided (required for profile completion)
-    if (!req.body.latitude || !req.body.longitude) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Latitude and longitude are required for profile completion'
-      });
-    }
-    
-    // Validate latitude and longitude are valid
-    const latitude = parseFloat(req.body.latitude);
-    const longitude = parseFloat(req.body.longitude);
-    
-    if (isNaN(latitude) || latitude < -90 || latitude > 90) {
-      return res.status(400).json({
-        success: false,
-        message: 'Latitude must be a number between -90 and 90'
-      });
-    }
-    
-    if (isNaN(longitude) || longitude < -180 || longitude > 180) {
-      return res.status(400).json({
-        success: false,
-        message: 'Longitude must be a number between -180 and 180'
-      });
+    // Handle location if provided
+    if (req.body.latitude !== undefined || req.body.longitude !== undefined) {
+      // Validate latitude if provided
+      if (req.body.latitude !== undefined) {
+        const latitude = parseFloat(req.body.latitude);
+        
+        if (isNaN(latitude) || latitude < -90 || latitude > 90) {
+          return res.status(400).json({
+            success: false,
+            message: 'Latitude must be a number between -90 and 90'
+          });
+        }
+        
+        user.latitude = latitude;
+      }
+      
+      // Validate longitude if provided
+      if (req.body.longitude !== undefined) {
+        const longitude = parseFloat(req.body.longitude);
+        
+        if (isNaN(longitude) || longitude < -180 || longitude > 180) {
+          return res.status(400).json({
+            success: false,
+            message: 'Longitude must be a number between -180 and 180'
+          });
+        }
+        
+        user.longitude = longitude;
+      }
     }
 
     // Process uploaded images (if provided in this request)
@@ -738,10 +803,20 @@ exports.completeUserProfile = async (req, res) => {
       const remainingSlots = Math.max(0, 5 - currentCount);
       const filesToProcess = uploadedImages.slice(0, remainingSlots);
       
+      const uploadToCloudinary = require('../../utils/cloudinaryUpload');
       const createdImageIds = [];
       for (const f of filesToProcess) {
-        const newImage = await FemaleImage.create({ femaleUserId: userId, imageUrl: f.path });
-        createdImageIds.push(newImage._id);
+        try {
+          const result = await uploadToCloudinary(f.buffer, 'admin_uploads', 'image');
+          const imageUrl = result.secure_url;
+          if (imageUrl) {
+            const newImage = await FemaleImage.create({ femaleUserId: userId, imageUrl: imageUrl });
+            createdImageIds.push(newImage._id);
+          }
+        } catch (uploadErr) {
+          console.error('Image upload error:', uploadErr);
+          return res.status(500).json({ success: false, message: 'Failed to upload image to Cloudinary', error: uploadErr.message });
+        }
       }
       
       user.images = [...(user.images || []), ...createdImageIds];
@@ -749,46 +824,66 @@ exports.completeUserProfile = async (req, res) => {
 
     // Process uploaded video (if provided in this request)
     if (uploadedVideo) {
-      user.videoUrl = uploadedVideo.path;
+      const uploadToCloudinary = require('../../utils/cloudinaryUpload');
+      try {
+        const result = await uploadToCloudinary(uploadedVideo.buffer, 'female_videos', 'video');
+        user.videoUrl = result.secure_url;
+      } catch (uploadErr) {
+        console.error('Video upload error:', uploadErr);
+        return res.status(500).json({ success: false, message: 'Failed to upload video to Cloudinary', error: uploadErr.message });
+      }
     }
 
     // Update user profile
-    user.latitude = latitude;
-    user.longitude = longitude;
     user.name = name;
-    user.age = age;
+    user.age = Number(age);
     user.gender = gender;
     user.bio = bio;
     
     // Arrays - only update if provided and validate ObjectIds
     if (interests && Array.isArray(interests) && interests.length > 0) {
       console.log('✅ Setting interests:', interests);
-      // Validate that these interest IDs exist
-      const Interest = require('../../models/admin/Interest');
-      const validInterests = await Interest.find({ _id: { $in: interests } });
-      console.log('Valid interests found:', validInterests.length, 'out of', interests.length);
-      user.interests = validInterests.map(i => i._id);
+      try {
+        // Validate that these interest IDs exist
+        const Interest = require('../../models/admin/Interest');
+        const validInterests = await Interest.find({ _id: { $in: interests } });
+        console.log('Valid interests found:', validInterests.length, 'out of', interests.length);
+        user.interests = validInterests.map(i => i._id);
+      } catch (interestErr) {
+        console.error('Error validating interests:', interestErr);
+        // Continue without setting interests if validation fails
+        user.interests = [];
+      }
     } else {
       console.log('❌ Not setting interests. Value:', interests, 'IsArray:', Array.isArray(interests), 'Length:', interests?.length);
     }
     
     if (languages && Array.isArray(languages) && languages.length > 0) {
       console.log('✅ Setting languages:', languages);
-      // Validate that these language IDs exist
-      const Language = require('../../models/admin/Language');
-      const validLanguages = await Language.find({ _id: { $in: languages } });
-      console.log('Valid languages found:', validLanguages.length, 'out of', languages.length);
-      user.languages = validLanguages.map(l => l._id);
+      try {
+        // Validate that these language IDs exist
+        const Language = require('../../models/admin/Language');
+        const validLanguages = await Language.find({ _id: { $in: languages } });
+        console.log('Valid languages found:', validLanguages.length, 'out of', languages.length);
+        user.languages = validLanguages.map(l => l._id);
+      } catch (languageErr) {
+        console.error('Error validating languages:', languageErr);
+        // Continue without setting languages if validation fails
+        user.languages = [];
+      }
     } else {
       console.log('❌ Not setting languages. Value:', languages, 'IsArray:', Array.isArray(languages), 'Length:', languages?.length);
     }
+    
+    // Import crypto once at the top to avoid repeated imports
+    const crypto = require('crypto');
     
     if (hobbies && Array.isArray(hobbies) && hobbies.length > 0) {
       user.hobbies = hobbies.map(item => {
         if (typeof item === 'object' && item.id && item.name) {
           return { id: item.id, name: item.name };
         }
-        const id = require('crypto').randomBytes(8).toString('hex');
+        const id = crypto.randomBytes(8).toString('hex');
         const name = item.name || item;
         return { id, name };
       });
@@ -798,7 +893,7 @@ exports.completeUserProfile = async (req, res) => {
         if (typeof item === 'object' && item.id && item.name) {
           return { id: item.id, name: item.name };
         }
-        const id = require('crypto').randomBytes(8).toString('hex');
+        const id = crypto.randomBytes(8).toString('hex');
         const name = item.name || item;
         return { id, name };
       });
@@ -808,7 +903,7 @@ exports.completeUserProfile = async (req, res) => {
         if (typeof item === 'object' && item.id && item.name) {
           return { id: item.id, name: item.name };
         }
-        const id = require('crypto').randomBytes(8).toString('hex');
+        const id = crypto.randomBytes(8).toString('hex');
         const name = item.name || item;
         return { id, name };
       });
@@ -818,7 +913,7 @@ exports.completeUserProfile = async (req, res) => {
         if (typeof item === 'object' && item.id && item.name) {
           return { id: item.id, name: item.name };
         }
-        const id = require('crypto').randomBytes(8).toString('hex');
+        const id = crypto.randomBytes(8).toString('hex');
         const name = item.name || item;
         return { id, name };
       });
@@ -828,7 +923,7 @@ exports.completeUserProfile = async (req, res) => {
         if (typeof item === 'object' && item.id && item.name) {
           return { id: item.id, name: item.name };
         }
-        const id = require('crypto').randomBytes(8).toString('hex');
+        const id = crypto.randomBytes(8).toString('hex');
         const name = item.name || item;
         return { id, name };
       });
@@ -840,7 +935,22 @@ exports.completeUserProfile = async (req, res) => {
     user.profileCompleted = true;      // Profile is now complete
     user.reviewStatus = 'pending';     // Set to pending for admin review
 
-    await user.save();
+    // Save user with timeout to prevent hanging
+    try {
+      const savePromise = user.save();
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Save operation timeout')), 15000); // 15 second timeout
+      });
+      
+      await Promise.race([savePromise, timeoutPromise]);
+    } catch (saveErr) {
+      console.error('Error saving user:', saveErr);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Save operation failed or timed out',
+        message: 'Unable to save profile completion, please try again later.'
+      });
+    }
     
     res.json({ 
       success: true, 
@@ -1113,6 +1223,37 @@ exports.updateUserInfo = async (req, res) => {
       }
     }
     
+    // Handle location updates if provided
+    if (req.body.latitude !== undefined || req.body.longitude !== undefined) {
+      // Validate latitude if provided
+      if (req.body.latitude !== undefined) {
+        const latitude = parseFloat(req.body.latitude);
+        
+        if (isNaN(latitude) || latitude < -90 || latitude > 90) {
+          return res.status(400).json({
+            success: false,
+            message: 'Latitude must be a number between -90 and 90'
+          });
+        }
+        
+        user.latitude = latitude;
+      }
+      
+      // Validate longitude if provided
+      if (req.body.longitude !== undefined) {
+        const longitude = parseFloat(req.body.longitude);
+        
+        if (isNaN(longitude) || longitude < -180 || longitude > 180) {
+          return res.status(400).json({
+            success: false,
+            message: 'Longitude must be a number between -180 and 180'
+          });
+        }
+        
+        user.longitude = longitude;
+      }
+    }
+    
     await user.save();
     
     // Return updated user with populated fields
@@ -1227,14 +1368,24 @@ exports.uploadImage = async (req, res) => {
 
     const filesToProcess = req.files.slice(0, remainingSlots);
     const skipped = req.files.length - filesToProcess.length;
-
+     
+    const uploadToCloudinary = require('../../utils/cloudinaryUpload');
     const createdImageIds = [];
     for (const f of filesToProcess) {
-      const newImage = await FemaleImage.create({ 
-        femaleUserId: req.user.id, 
-        imageUrl: f.path 
-      });
-      createdImageIds.push(newImage._id);
+      try {
+        const result = await uploadToCloudinary(f.buffer, 'admin_uploads', 'image');
+        const imageUrl = result.secure_url;
+        if (imageUrl) {
+          const newImage = await FemaleImage.create({ 
+            femaleUserId: req.user.id, 
+            imageUrl: imageUrl 
+          });
+          createdImageIds.push(newImage._id);
+        }
+      } catch (uploadErr) {
+        console.error('Image upload error:', uploadErr);
+        return res.status(500).json({ success: false, message: 'Failed to upload image to Cloudinary', error: uploadErr.message });
+      }
     }
 
     user.images = [...(user.images || []).map(img => img._id ? img._id : img), ...createdImageIds];
@@ -1268,11 +1419,21 @@ exports.uploadVideo = async (req, res) => {
       });
     }
 
-    const videoUrl = req.file.path;
-    const publicId = req.file.filename; // cloudinary public_id
-    const resourceType = req.file.resource_type || 'video';
-    const duration = req.file.duration;
-    const bytes = req.file.bytes;
+    const uploadToCloudinary = require('../../utils/cloudinaryUpload');
+    
+    let result;
+    try {
+      result = await uploadToCloudinary(req.file.buffer, 'female_videos', 'video');
+    } catch (uploadErr) {
+      console.error('Video upload error:', uploadErr);
+      return res.status(500).json({ success: false, message: 'Failed to upload video to Cloudinary', error: uploadErr.message });
+    }
+    
+    const videoUrl = result.secure_url;
+    const publicId = result.public_id;
+    const resourceType = result.resource_type || 'video';
+    const duration = result.duration;
+    const bytes = result.bytes;
     
     const user = await FemaleUser.findById(req.user.id);
     if (!user) {

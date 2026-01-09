@@ -860,14 +860,21 @@ exports.uploadImage = async (req, res) => {
       return res.status(400).json({ success: false, message: messages.IMAGE.NO_IMAGES });
     }
 
-    const uploadedUrls = req.files.map((f) => f.path);
-
+    const uploadToCloudinary = require('../../utils/cloudinaryUpload');
+    
     // Save each image in Image collection and keep track of them
     const savedImages = [];
-    for (const url of uploadedUrls) {
-      const newImage = new Image({ maleUserId: req.user.id, imageUrl: url });
-      const savedImage = await newImage.save();
-      savedImages.push(savedImage);
+    for (const f of req.files) {
+      try {
+        const result = await uploadToCloudinary(f.buffer, 'admin_uploads', 'image');
+        const imageUrl = result.secure_url;
+        const newImage = new Image({ maleUserId: req.user.id, imageUrl: imageUrl });
+        const savedImage = await newImage.save();
+        savedImages.push(savedImage);
+      } catch (uploadErr) {
+        console.error('Image upload error:', uploadErr);
+        return res.status(500).json({ success: false, message: 'Failed to upload image to Cloudinary', error: uploadErr.message });
+      }
     }
     
     // Also persist to MaleUser.images array as references to Image documents
@@ -876,6 +883,7 @@ exports.uploadImage = async (req, res) => {
     user.images = Array.isArray(user.images) ? [...user.images, ...newImageIds] : newImageIds;
     await user.save();
 
+    const uploadedUrls = savedImages.map(img => img.imageUrl);
     res.json({ success: true, message: messages.IMAGE.IMAGE_UPLOAD_SUCCESS, urls: uploadedUrls });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1493,14 +1501,19 @@ exports.updateProfileAndImage = async (req, res) => {
     
     // Handle image upload if files are provided
     if (req.files && req.files.length > 0) {
-      const uploadedUrls = req.files.map((f) => f.path);
+      // Map file objects to URLs, ensuring we have valid URLs
+      const uploadedUrls = req.files
+        .map((f) => f.path || f.url || f.secure_url)
+        .filter(url => url); // Only keep valid URLs
 
       // Save each image in Image collection and get the saved documents
       const savedImages = [];
       for (const url of uploadedUrls) {
-        const newImage = new Image({ maleUserId: req.user.id, imageUrl: url });
-        const savedImage = await newImage.save();
-        savedImages.push(savedImage);
+        if (url) { // Double-check URL exists
+          const newImage = new Image({ maleUserId: req.user.id, imageUrl: url });
+          const savedImage = await newImage.save();
+          savedImages.push(savedImage);
+        }
       }
 
       // Update the user's images array to reference the Image documents
@@ -1509,7 +1522,22 @@ exports.updateProfileAndImage = async (req, res) => {
       user.images = Array.isArray(user.images) ? [...user.images, ...newImageIds] : newImageIds;
     }
     
-    await user.save();
+    // Save user with timeout to prevent hanging
+    try {
+      const savePromise = user.save();
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Save operation timeout')), 15000); // 15 second timeout
+      });
+      
+      await Promise.race([savePromise, timeoutPromise]);
+    } catch (saveErr) {
+      console.error('Error saving user in updateProfileAndImage:', saveErr);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Save operation failed or timed out',
+        message: 'Unable to save profile update, please try again later.'
+      });
+    }
     
     // Return updated user with populated fields
     const updatedUser = await MaleUser.findById(user._id)
