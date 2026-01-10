@@ -1,13 +1,21 @@
 require('dotenv').config();
 
+const express = require('express');
+const http = require('http');
 const app = require('./app');
 const connectDB = require('./config/db');
+const initSocket = require('./socket');
 const { assignWeeklyLevels } = require('./jobs/levelAssignmentJob');
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 // Connect to database and start server
 connectDB().then(() => {
-  app.listen(PORT, () => {
+  const server = http.createServer(app);
+  
+  // Initialize Socket.IO
+  initSocket(server);
+  
+  server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     console.log('Server started successfully');
     

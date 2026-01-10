@@ -83,6 +83,32 @@ The system implements a sophisticated multi-role authentication system with diff
 - **Male User**: Content consumers with spending capabilities
 - **Agency**: Business entities managing multiple female users
 
+## Common Chat System
+
+The platform includes a sophisticated real-time chat system with advanced features and security.
+
+### Chat Features
+- **Mutual Follow Validation**: Chat initiation requires accepted follow requests
+- **Real-time Messaging**: WebSocket-based real-time message delivery
+- **Media Support**: Image, video, and audio message support with Cloudinary integration
+- **Message Management**: Individual and group message deletion
+- **Read Receipts**: Real-time read status with bulk marking capability
+- **Disappearing Messages**: Automatic message deletion after configurable time
+- **Privacy Controls**: Two-tier deletion system (clear vs delete chat)
+
+### Privacy & Deletion Options
+- **Clear Chat**: `DELETE /chat/room/:roomId/clear` - Remove all messages for user while keeping chat visible
+- **Delete Chat**: `DELETE /chat/room/:roomId` - Hide chat from user's list (soft delete)
+- **Delete Message**: Remove individual messages for specific users
+- **Delete for Everyone**: Sender-only feature to remove messages for all participants
+
+### Security Features
+- **Access Control**: Only chat participants can send/read messages
+- **User Verification**: Database verification of user type against JWT claims
+- **Follow Validation**: Enforces accepted follow requests for chat initiation
+- **Block List Enforcement**: Prevents communication between blocked users
+- **Rate Limiting**: Protection against message spamming
+
 ## Admin & Staff System
 
 ### Admin Authentication
@@ -345,6 +371,17 @@ The system implements a sophisticated multi-role authentication system with diff
 ├── GET /me/balance                # Get balance information
 └── GET /me/withdrawals            # Get withdrawal history
 
+/common/
+├── POST /chat/start               # Start chat with another user
+├── GET /chat/rooms                # Get user's chat rooms
+├── GET /chat/:roomId/messages     # Get messages for a chat room
+├── POST /chat/send                # Send a message
+├── DELETE /chat/message/:messageId # Delete message for user
+├── DELETE /chat/message/:messageId/delete-for-everyone # Delete message for everyone
+├── POST /chat/:roomId/disappearing # Enable disappearing messages
+└── POST /chat/upload              # Upload media file
+└── POST /chat/upload              # Upload media file
+
 /female-user/chat/
 ├── POST /send-message             # Send chat message
 └── GET /chat-history              # Get chat history
@@ -429,6 +466,20 @@ The system implements a sophisticated multi-role authentication system with diff
 ├── POST /block/:userId            # Block user
 ├── POST /unblock/:userId          # Unblock user
 └── GET /                          # Get block list
+
+/common/
+├── POST /chat/start               # Start chat with another user
+├── GET /chat/rooms                # Get user's chat rooms
+├── GET /chat/:roomId/messages     # Get messages for a chat room
+├── POST /chat/send                # Send a message
+├── DELETE /chat/message/:messageId # Delete message for user
+├── DELETE /chat/message/:messageId/delete-for-everyone # Delete message for everyone
+├── POST /chat/mark-as-read        # Mark message(s) as read
+├── DELETE /chat/room/:roomId      # Delete chat for user
+├── DELETE /chat/room/:roomId/clear # Clear chat messages
+├── POST /chat/:roomId/disappearing # Toggle disappearing messages
+├── GET /chat/uploads              # Get user's uploaded media files
+└── POST /chat/upload              # Upload media file
 ```
 
 ### Agency Routes
@@ -462,6 +513,16 @@ The system implements a sophisticated multi-role authentication system with diff
 4. **Admin Review**: Profile goes under admin review (pending status)
 5. **Approval Process**: Admin approves/rejects the registration
 6. **Account Activation**: Approved users can access full features
+
+### Chat Workflow
+1. **Follow Request**: Male user sends follow request to female user
+2. **Follow Acceptance**: Female user accepts the follow request
+3. **Chat Initiation**: Male user initiates chat after follow acceptance
+4. **Real-time Messaging**: Messages sent with WebSocket delivery
+5. **Media Sharing**: Files uploaded to Cloudinary with URL references
+6. **Read Receipts**: Messages marked as read with bulk processing
+7. **Message Deletion**: Options for individual or group deletion
+8. **Privacy Controls**: Clear chat or delete entire conversation
 
 ### Economic System
 - **Coins vs Wallet Balance**:
@@ -571,6 +632,8 @@ The system implements a sophisticated multi-role authentication system with diff
 - **WithdrawalRequest**: Withdrawal request tracking
 - **FollowRequest**: Follow request management
 - **PendingReward**: Pending reward calculations
+- **ChatRoom**: Chat room with participants and metadata
+- **Message**: Individual chat messages with read receipts and deletion status
 
 ## Security & Middleware
 

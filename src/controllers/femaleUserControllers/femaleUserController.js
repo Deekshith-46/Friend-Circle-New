@@ -515,7 +515,7 @@ exports.verifyLoginOtp = async (req, res) => {
       await user.save();
 
       // Generate JWT token
-      const token = generateToken(user._id);
+      const token = generateToken(user._id, 'female');
 
       // Determine redirect based on reviewStatus
       let redirectTo = 'COMPLETE_PROFILE'; // default
@@ -562,7 +562,7 @@ exports.verifyOtp = async (req, res) => {
     const user = await FemaleUser.findOne({ otp, isVerified: false });
 
     if (user) {
-      const token = generateToken(user._id);
+      const token = generateToken(user._id, 'female');
       
       // After OTP verification:
       user.isVerified = true;  // Mark as verified

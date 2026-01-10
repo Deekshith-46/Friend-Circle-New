@@ -68,6 +68,9 @@ app.use('/male-user/gifts', require('./routes/maleUserRoutes/giftRoutes')); // G
 // Routes for Agency User
 app.use('/agency', require('./routes/agencyRoutes/agencyUserRoutes'));
 
+// Common routes
+app.use('/chat', require('./routes/common/chatRoutes'));
+
 // Error middleware
 app.use(require('./middlewares/errorMiddleware'));
 

@@ -132,7 +132,7 @@ exports.agencyVerifyLoginOtp = async (req, res) => {
       await agency.save();
 
       // Generate JWT token
-      const token = generateToken(agency._id);
+      const token = generateToken(agency._id, 'agency');
 
       // Determine redirect based on reviewStatus
       let redirectTo = 'COMPLETE_PROFILE'; // default
@@ -180,7 +180,7 @@ exports.agencyVerifyOtp = async (req, res) => {
     const agency = await AgencyUser.findOne({ otp, isVerified: false });
 
     if (agency) {
-      const token = generateToken(agency._id);
+      const token = generateToken(agency._id, 'agency');
       
       // After OTP verification:
       agency.isVerified = true;  // Mark as verified

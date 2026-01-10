@@ -778,7 +778,7 @@ exports.verifyLoginOtp = async (req, res) => {
       await user.save();
 
       // Generate JWT token
-      const token = generateToken(user._id);
+      const token = generateToken(user._id, 'male');
 
       res.json({
         success: true,
@@ -838,7 +838,7 @@ exports.verifyOtp = async (req, res) => {
       success: true, 
       message: messages.AUTH.OTP_VERIFIED,
       data: {
-        token: generateToken(user._id),
+        token: generateToken(user._id, 'male'),
         user: {
           id: user._id,
           email: user.email,

@@ -42,21 +42,52 @@ const auth = async (req, res, next) => {
       if (!req.user) {
         return res.status(404).json({ success: false, message: messages.AUTH_MIDDLEWARE.USER_NOT_FOUND });
       }
-      
-    }
-    else if (req.originalUrl.startsWith('/male-user')) {
+      req.user.type = 'female'; // Set user type
+    } else if (req.originalUrl.startsWith('/male-user')) {
         // Male user authentication
         req.user = await MaleUser.findById(decoded.id); // Store user data in req.user
         if (!req.user) {
             return res.status(404).json({ success: false, message: messages.AUTH_MIDDLEWARE.USER_NOT_FOUND });
         }
-    }
-    else if (req.originalUrl.startsWith('/agency')) {
+        req.user.type = 'male'; // Set user type
+    } else if (req.originalUrl.startsWith('/agency')) {
         // Agency user authentication
         req.user = await AgencyUser.findById(decoded.id);
         if (!req.user) {
             return res.status(404).json({ success: false, message: messages.AUTH_MIDDLEWARE.USER_NOT_FOUND });
         }
+    } else {
+        // General user authentication for other routes (like /chat)
+        // Try to find user in different collections
+        let user;
+        let userType;
+        
+        user = await FemaleUser.findById(decoded.id);
+        if (user) {
+          userType = 'female';
+        } else {
+          user = await MaleUser.findById(decoded.id);
+          if (user) {
+            userType = 'male';
+          } else {
+            user = await AdminUser.findById(decoded.id);
+            if (user) {
+              userType = 'admin';
+            } else {
+              user = await AgencyUser.findById(decoded.id);
+              if (user) {
+                userType = 'agency';
+              }
+            }
+          }
+        }
+        
+        if (!user) {
+          return res.status(404).json({ success: false, message: messages.AUTH_MIDDLEWARE.USER_NOT_FOUND });
+        }
+        
+        req.user = user;
+        req.user.type = userType;
     }
 
     // Proceed to the next middleware or route handler

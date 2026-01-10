@@ -30,7 +30,7 @@ exports.loginAdmin = async (req, res) => {
       res.json({
         success: true,
         data: {
-          token: generateToken(admin._id),
+          token: generateToken(admin._id, 'admin'),
           user: { id: admin._id, name: admin.name, email: admin.email, type: 'admin' }
         }
       });
@@ -44,7 +44,7 @@ exports.loginAdmin = async (req, res) => {
       res.json({
         success: true,
         data: {
-          token: generateToken(staff._id),
+          token: generateToken(staff._id, 'staff'),
           user: { id: staff._id, email: staff.email, type: 'staff', permissions: staff.permissions }
         }
       });
