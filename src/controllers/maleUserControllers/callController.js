@@ -4,8 +4,6 @@ const CallHistory = require('../../models/common/CallHistory');
 const Transaction = require('../../models/common/Transaction');
 const AdminConfig = require('../../models/admin/AdminConfig');
 const AdminLevelConfig = require('../../models/admin/AdminLevelConfig');
-const MaleFollowing = require('../../models/maleUser/Following');
-const FemaleFollowing = require('../../models/femaleUser/Following');
 const messages = require('../../validations/messages');
 
 // Start Call - Check minimum coins requirement and calculate max duration
@@ -40,22 +38,11 @@ exports.startCall = async (req, res) => {
       });
     }
 
-    // Check if users follow each other (they are matched)
-    // We need to check the actual following collections, not just the arrays in user documents
-    const isCallerFollowing = await MaleFollowing.findOne({ 
-      maleUserId: callerId, 
-      femaleUserId: receiverId 
-    });
-    
-    const isReceiverFollowing = await FemaleFollowing.findOne({ 
-      femaleUserId: receiverId, 
-      maleUserId: callerId 
-    });
-    
-    if (!isCallerFollowing || !isReceiverFollowing) {
+    // Check if female user is online
+    if (!receiver.onlineStatus) {
       return res.status(400).json({
         success: false,
-        message: messages.CALL.FOLLOW_EACH_OTHER
+        message: 'The selected user is currently offline'
       });
     }
 

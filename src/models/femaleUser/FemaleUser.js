@@ -83,6 +83,7 @@ const femaleUserSchema = new mongoose.Schema({
   // Location fields
   latitude: { type: Number },
   longitude: { type: Number },
+  locationUpdatedAt: { type: Date },
   // Referral system
   referralCode: { type: String, unique: true, sparse: true },
   referredByFemale: [{ type: mongoose.Schema.Types.ObjectId, ref: 'FemaleUser' }],

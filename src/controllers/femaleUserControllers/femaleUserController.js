@@ -766,36 +766,7 @@ exports.completeUserProfile = async (req, res) => {
     //   });
     // }
 
-    // Handle location if provided
-    if (req.body.latitude !== undefined || req.body.longitude !== undefined) {
-      // Validate latitude if provided
-      if (req.body.latitude !== undefined) {
-        const latitude = parseFloat(req.body.latitude);
-        
-        if (isNaN(latitude) || latitude < -90 || latitude > 90) {
-          return res.status(400).json({
-            success: false,
-            message: 'Latitude must be a number between -90 and 90'
-          });
-        }
-        
-        user.latitude = latitude;
-      }
-      
-      // Validate longitude if provided
-      if (req.body.longitude !== undefined) {
-        const longitude = parseFloat(req.body.longitude);
-        
-        if (isNaN(longitude) || longitude < -180 || longitude > 180) {
-          return res.status(400).json({
-            success: false,
-            message: 'Longitude must be a number between -180 and 180'
-          });
-        }
-        
-        user.longitude = longitude;
-      }
-    }
+
 
     // Process uploaded images (if provided in this request)
     if (uploadedImages.length > 0) {
@@ -1223,36 +1194,7 @@ exports.updateUserInfo = async (req, res) => {
       }
     }
     
-    // Handle location updates if provided
-    if (req.body.latitude !== undefined || req.body.longitude !== undefined) {
-      // Validate latitude if provided
-      if (req.body.latitude !== undefined) {
-        const latitude = parseFloat(req.body.latitude);
-        
-        if (isNaN(latitude) || latitude < -90 || latitude > 90) {
-          return res.status(400).json({
-            success: false,
-            message: 'Latitude must be a number between -90 and 90'
-          });
-        }
-        
-        user.latitude = latitude;
-      }
-      
-      // Validate longitude if provided
-      if (req.body.longitude !== undefined) {
-        const longitude = parseFloat(req.body.longitude);
-        
-        if (isNaN(longitude) || longitude < -180 || longitude > 180) {
-          return res.status(400).json({
-            success: false,
-            message: 'Longitude must be a number between -180 and 180'
-          });
-        }
-        
-        user.longitude = longitude;
-      }
-    }
+
     
     await user.save();
     
@@ -1701,7 +1643,7 @@ exports.updateReviewStatus = async (req, res) => {
 exports.toggleOnlineStatus = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { onlineStatus } = req.body; // true for online, false for offline
+    const { onlineStatus, latitude, longitude } = req.body; // true for online, false for offline
     
     if (typeof onlineStatus !== 'boolean') {
       return res.status(400).json({ 
@@ -1717,9 +1659,21 @@ exports.toggleOnlineStatus = async (req, res) => {
 
     // If going online
     if (onlineStatus) {
+      // Location is required to go online
+      if (latitude === undefined || longitude === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: 'Location is required to go online'
+        });
+      }
+      
       // Set online start time
       user.onlineStartTime = new Date();
       user.onlineStatus = true;
+      
+      user.latitude = parseFloat(latitude);
+      user.longitude = parseFloat(longitude);
+      user.locationUpdatedAt = new Date();
     } 
     // If going offline
     else {
@@ -1741,6 +1695,73 @@ exports.toggleOnlineStatus = async (req, res) => {
       data: {
         onlineStatus: user.onlineStatus,
         totalOnlineMinutes: user.totalOnlineMinutes || 0
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// Refresh location for female user when app opens/resumes
+exports.locationRefresh = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { latitude, longitude } = req.body;
+    
+    if (latitude === undefined || longitude === undefined) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'latitude and longitude are required in request body' 
+      });
+    }
+
+    // Validate coordinates
+    const lat = parseFloat(latitude);
+    const lng = parseFloat(longitude);
+    
+    if (isNaN(lat) || lat < -90 || lat > 90) {
+      return res.status(400).json({
+        success: false,
+        message: 'latitude must be a number between -90 and 90'
+      });
+    }
+    
+    if (isNaN(lng) || lng < -180 || lng > 180) {
+      return res.status(400).json({
+        success: false,
+        message: 'longitude must be a number between -180 and 180'
+      });
+    }
+
+    const user = await FemaleUser.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: messages.COMMON.USER_NOT_FOUND });
+    }
+
+    // Only update location if user is online
+    if (!user.onlineStatus) {
+      return res.json({ 
+        success: true, 
+        message: 'User is offline, location update ignored',
+        data: {
+          onlineStatus: user.onlineStatus
+        }
+      });
+    }
+
+    // Update location
+    user.latitude = lat;
+    user.longitude = lng;
+    user.locationUpdatedAt = new Date();
+
+    await user.save();
+
+    return res.json({ 
+      success: true, 
+      message: 'Location updated successfully',
+      data: {
+        latitude: user.latitude,
+        longitude: user.longitude
       }
     });
   } catch (err) {

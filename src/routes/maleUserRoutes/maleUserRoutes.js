@@ -79,9 +79,6 @@ router.patch('/travel', auth, parser.none(), maleUserController.updateTravel);
 // Update basic profile details
 router.patch('/profile-details', auth, parser.none(), maleUserController.updateProfileDetails);
 
-// Update location
-router.patch('/location', auth, parser.none(), maleUserController.updateLocation);
-
 // Update user profile and upload image in single request
 router.post('/profile-and-image', auth, parser.array('images', 5), maleUserController.updateProfileAndImage);
 

@@ -4,6 +4,6 @@ const auth = require('../../middlewares/authMiddleware');
 const maleUserController = require('../../controllers/maleUserControllers/maleUserController');
 
 // Get male dashboard with All, Nearby, Followed, New sections
-router.get('/dashboard', auth, maleUserController.getDashboard);
+router.post('/dashboard', auth, maleUserController.getDashboard);
 
 module.exports = router;

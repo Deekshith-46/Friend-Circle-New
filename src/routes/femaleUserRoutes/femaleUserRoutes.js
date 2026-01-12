@@ -161,10 +161,11 @@ router.patch('/music', auth, requireReviewAccepted, femaleUserController.updateM
 router.patch('/travel', auth, requireReviewAccepted, femaleUserController.updateTravel);
 
 // Update location
-router.patch('/location', auth, requireReviewAccepted, upload.none(), femaleUserController.updateLocation);
-
 // Online Status Toggle
 router.post('/toggle-online-status', auth, requireReviewAccepted, femaleUserController.toggleOnlineStatus);
+
+// Location Refresh
+router.post('/location/refresh', auth, requireReviewAccepted, femaleUserController.locationRefresh);
 
 // Apply block middleware to protected routes
 router.use(preventBlockedInteraction);

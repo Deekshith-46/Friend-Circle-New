@@ -1775,24 +1775,28 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
 exports.getDashboard = async (req, res) => {
   try {
     const maleUserId = req.user._id;
-    const { section = 'all', page = 1, limit = 10 } = req.query;
+    const { section = 'all', page = 1, limit = 10, location, search } = req.body;
     const skip = (page - 1) * limit;
-    
-    // Get male user's location
-    const maleUser = await MaleUser.findById(maleUserId);
-    if (!maleUser) {
-      return res.status(404).json({ success: false, message: messages.COMMON.USER_NOT_FOUND });
-    }
-    
-    if (!maleUser.latitude || !maleUser.longitude) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Male user location not set. Please update your location first." 
+
+    // Validate section parameter
+    const validSections = ['all', 'nearby', 'follow', 'new'];
+    if (!validSections.includes(section.toLowerCase())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid section. Use 'all', 'nearby', 'follow', or 'new'"
       });
     }
-    
+
+    // Validate required parameters for nearby section
+    if (section.toLowerCase() === 'nearby' && (!location?.latitude || !location?.longitude)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Location with latitude and longitude are required for nearby section'
+      });
+    }
+
     // Get admin config for nearby distance settings and new user window
-    const adminConfig = await AdminConfig.getConfig();
+    const adminConfig = await AdminConfig.getConfig(); 
     const nearbyDistanceValue = adminConfig.nearbyDistanceValue || 5; // Default 5 km
     const nearbyDistanceUnit = adminConfig.nearbyDistanceUnit || 'km'; // Default km
     const newUserWindowDays = adminConfig.newUserWindowDays || 7; // Default 7 days for new users
@@ -1804,7 +1808,12 @@ exports.getDashboard = async (req, res) => {
       onlineStatus: true, // Only show online females
       profileCompleted: true
     };
-    
+
+    // Add search filter if provided
+    if (search) {
+      baseFilter.name = { $regex: search, $options: 'i' };
+    }
+
     // Get list of users that the current male user has blocked
     const blockedByCurrentUser = await MaleBlockList.find({ maleUserId }).select('blockedUserId');
     const blockedByCurrentUserIds = blockedByCurrentUser.map(block => block.blockedUserId);
@@ -1837,9 +1846,23 @@ exports.getDashboard = async (req, res) => {
         break;
         
       case 'nearby':
-        // First get all eligible females
-        const allEligibleFemales = await FemaleUser.find(baseFilter)
-          .select('_id name age gender bio images onlineStatus hideAge latitude longitude')
+        // Update male user's location with live coordinates from request
+        await MaleUser.findByIdAndUpdate(maleUserId, {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          locationUpdatedAt: new Date()
+        });
+
+        // First get all eligible females with location freshness (TTL check)
+        const TTL_MINUTES = 15;
+        const cutoffTime = new Date(Date.now() - TTL_MINUTES * 60 * 1000);
+        
+        // Apply TTL check in MongoDB query for efficiency
+        const allEligibleFemales = await FemaleUser.find({
+          ...baseFilter,
+          locationUpdatedAt: { $gte: cutoffTime }  // Only users with recent location updates
+        })
+          .select('_id name age gender bio images onlineStatus hideAge latitude longitude locationUpdatedAt')
           .populate({ path: 'images', select: 'imageUrl' })
           .lean();
         
@@ -1850,8 +1873,8 @@ exports.getDashboard = async (req, res) => {
           }
           
           const distance = calculateDistance(
-            maleUser.latitude,
-            maleUser.longitude,
+            location.latitude,  // Use live location from request
+            location.longitude,
             female.latitude,
             female.longitude
           );
@@ -1865,14 +1888,14 @@ exports.getDashboard = async (req, res) => {
         // Sort by distance (closest first) and apply pagination
         nearbyFemales.sort((a, b) => {
           const distA = calculateDistance(
-            maleUser.latitude,
-            maleUser.longitude,
+            location.latitude,  // Use live location from request
+            location.longitude,
             a.latitude,
             a.longitude
           );
           const distB = calculateDistance(
-            maleUser.latitude,
-            maleUser.longitude,
+            location.latitude,  // Use live location from request
+            location.longitude,
             b.latitude,
             b.longitude
           );
@@ -1883,7 +1906,7 @@ exports.getDashboard = async (req, res) => {
         results = nearbyFemales.slice(skip, skip + limit);
         break;
         
-      case 'followed':
+      case 'follow':
         // Get list of females the male is following
         const following = await MaleFollowing.find({ maleUserId }).select('femaleUserId');
         const followingIds = following.map(f => f.femaleUserId);
@@ -1930,7 +1953,7 @@ exports.getDashboard = async (req, res) => {
       default:
         return res.status(400).json({ 
           success: false, 
-          message: "Invalid section. Use 'all', 'nearby', 'followed', or 'new'" 
+          message: "Invalid section. Use 'all', 'nearby', 'follow', or 'new'" 
         });
     }
     
@@ -1954,8 +1977,8 @@ exports.getDashboard = async (req, res) => {
       // Add distance for nearby section
       if (section.toLowerCase() === 'nearby' && female.latitude && female.longitude) {
         const distance = calculateDistance(
-          maleUser.latitude,
-          maleUser.longitude,
+          location.latitude,  // Use live location from request
+          location.longitude,
           female.latitude,
           female.longitude
         );
@@ -1992,65 +2015,4 @@ exports.getDashboard = async (req, res) => {
 };
 
 // Update male user location
-exports.updateLocation = async (req, res) => {
-  try {
-    const { latitude, longitude } = req.body;
-    const userId = req.user._id;
-    
-    // Validate latitude and longitude are provided
-    if (latitude === undefined || longitude === undefined) {
-      return res.status(400).json({
-        success: false,
-        message: "latitude and longitude are required"
-      });
-    }
-    
-    // Validate latitude is within valid range (-90 to 90)
-    const lat = Number(latitude);
-    if (isNaN(lat) || lat < -90 || lat > 90) {
-      return res.status(400).json({
-        success: false,
-        message: "latitude must be a number between -90 and 90"
-      });
-    }
-    
-    // Validate longitude is within valid range (-180 to 180)
-    const lng = Number(longitude);
-    if (isNaN(lng) || lng < -180 || lng > 180) {
-      return res.status(400).json({
-        success: false,
-        message: "longitude must be a number between -180 and 180"
-      });
-    }
-    
-    const updateData = { 
-      latitude: lat,
-      longitude: lng
-    };
-    
-    const user = await MaleUser.findByIdAndUpdate(
-      userId,
-      updateData,
-      { new: true }
-    ).select('-otp -password');
-    
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: messages.COMMON.USER_NOT_FOUND
-      });
-    }
-    
-    return res.json({
-      success: true,
-      message: "Location updated successfully",
-      data: {
-        latitude: user.latitude,
-        longitude: user.longitude
-      }
-    });
-  } catch (err) {
-    console.error('❌ Error in updateLocation:', err);
-    return res.status(500).json({ success: false, error: err.message });
-  }
-};
+
