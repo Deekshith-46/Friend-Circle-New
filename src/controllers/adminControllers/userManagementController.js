@@ -719,6 +719,13 @@ exports.createUpdateLevelConfig = async (req, res) => {
     }
     
     // Validate ranges for required fields
+    if (level < 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Level must be a valid non-negative number (0 or greater)'
+      });
+    }
+    
     if (weeklyEarningsMin < 0 || weeklyEarningsMax < 0 || weeklyEarningsMin > weeklyEarningsMax) {
       return res.status(400).json({
         success: false,
@@ -957,10 +964,10 @@ exports.updateLevelConfig = async (req, res) => {
     }
     
     // Validate numeric values if provided
-    if (updateData.level !== undefined && (isNaN(updateData.level) || updateData.level <= 0)) {
+    if (updateData.level !== undefined && (isNaN(updateData.level) || updateData.level < 0)) {
       return res.status(400).json({
         success: false,
-        message: 'level must be a valid positive number'
+        message: 'level must be a valid non-negative number (0 or greater)'
       });
     }
     

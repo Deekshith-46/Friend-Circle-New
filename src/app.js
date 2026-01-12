@@ -43,6 +43,8 @@ app.use('/admin/staff', require('./routes/adminRoutes/staff'));
 app.use('/admin/users', require('./routes/adminRoutes/users'));
 app.use('/admin/rewards', require('./routes/adminRoutes/reward'));
 app.use('/admin/payouts', require('./routes/adminRoutes/payoutRoutes'));
+app.use('/admin/top-fan-config', require('./routes/adminRoutes/topFanConfig'));
+app.use('/admin/top-fans', require('./routes/adminRoutes/adminTopFans'));
 
 
 // Routes for Female User

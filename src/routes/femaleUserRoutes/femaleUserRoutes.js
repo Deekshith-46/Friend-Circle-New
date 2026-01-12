@@ -193,6 +193,9 @@ router.use('/follow-requests', followRequestRoutes);
 // Delete User Account
 router.delete('/delete', auth, femaleUserController.deleteUser);
 
+// Chat Tabs Routes
+router.use('/chat-tabs', require('./femaleChatTabsRoutes'));
+
 // Chat Routes
 router.post('/send-message', auth, requireReviewAccepted, chatController.sendMessage);
 router.get('/chat-history', auth, requireReviewAccepted, chatController.getChatHistory);

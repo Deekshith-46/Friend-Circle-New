@@ -45,8 +45,6 @@ const levelConfigSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-// Index for efficient querying by level
-levelConfigSchema.index({ level: 1 });
 // Index for efficient querying by earnings range
 levelConfigSchema.index({ weeklyEarningsMin: 1, weeklyEarningsMax: 1 });
 
