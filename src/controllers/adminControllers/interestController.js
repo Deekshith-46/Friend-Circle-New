@@ -1,12 +1,19 @@
 const Interest = require('../../models/admin/Interest');
 const createAuditLog = require('../../utils/createAuditLog');
 const getUserId = require('../../utils/getUserId');
+const uploadToCloudinary = require('../../utils/cloudinaryUpload');
 
 // Create Interest
 exports.createInterest = async (req, res) => {
   try {
     const { title, status } = req.body;
-    const imageUrl = req.file ? req.file.path : null;
+    
+    let imageUrl = null;
+    if (req.file) {
+      // Upload image to Cloudinary
+      const result = await uploadToCloudinary(req.file.buffer, 'interests');
+      imageUrl = result.secure_url;
+    }
 
     const userId = getUserId(req);
 
@@ -39,8 +46,13 @@ exports.getAllInterests = async (req, res) => {
 exports.updateInterest = async (req, res) => {
   try {
     const { title, status } = req.body;
+    
     const updateData = { title, status };
-    if (req.file) updateData.imageUrl = req.file.path;
+    if (req.file) {
+      // Upload image to Cloudinary
+      const result = await uploadToCloudinary(req.file.buffer, 'interests');
+      updateData.imageUrl = result.secure_url;
+    }
 
     const userId = getUserId(req);
 

@@ -1,11 +1,18 @@
 const Language = require('../../models/admin/Language');
 const createAuditLog = require('../../utils/createAuditLog');
 const getUserId = require('../../utils/getUserId');
+const uploadToCloudinary = require('../../utils/cloudinaryUpload');
 
 exports.createLanguage = async (req, res) => {
   try {
     const { title, status } = req.body;
-    const imageUrl = req.file ? req.file.path : null;
+    
+    let imageUrl = null;
+    if (req.file) {
+      // Upload image to Cloudinary
+      const result = await uploadToCloudinary(req.file.buffer, 'languages');
+      imageUrl = result.secure_url;
+    }
 
     const userId = getUserId(req);
 
@@ -36,8 +43,13 @@ exports.getAllLanguages = async (req, res) => {
 exports.updateLanguage = async (req, res) => {
   try {
     const { title, status } = req.body;
+    
     const updateData = { title, status };
-    if (req.file) updateData.imageUrl = req.file.path;
+    if (req.file) {
+      // Upload image to Cloudinary
+      const result = await uploadToCloudinary(req.file.buffer, 'languages');
+      updateData.imageUrl = result.secure_url;
+    }
 
     const userId = getUserId(req);
 

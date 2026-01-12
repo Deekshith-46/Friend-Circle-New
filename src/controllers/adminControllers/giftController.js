@@ -1,11 +1,18 @@
 const Gift = require('../../models/admin/Gift');
 const createAuditLog = require('../../utils/createAuditLog');
 const getUserId = require('../../utils/getUserId');
+const uploadToCloudinary = require('../../utils/cloudinaryUpload');
 
 exports.createGift = async (req, res) => {
   try {
     const { coin, status } = req.body;
-    const imageUrl = req.file ? req.file.path : null;
+    
+    let imageUrl = null;
+    if (req.file) {
+      // Upload image to Cloudinary
+      const result = await uploadToCloudinary(req.file.buffer, 'gifts');
+      imageUrl = result.secure_url;
+    }
 
     const userId = getUserId(req);
     const gift = await Gift.create({ coin, status, imageUrl, createdBy: userId });
@@ -30,8 +37,13 @@ exports.getAllGifts = async (req, res) => {
 exports.updateGift = async (req, res) => {
   try {
     const { coin, status } = req.body;
+    
     const updateData = { coin, status };
-    if (req.file) updateData.imageUrl = req.file.path;
+    if (req.file) {
+      // Upload image to Cloudinary
+      const result = await uploadToCloudinary(req.file.buffer, 'gifts');
+      updateData.imageUrl = result.secure_url;
+    }
 
     const userId = getUserId(req);
     const gift = await Gift.findByIdAndUpdate(req.params.id, updateData, { new: true });
