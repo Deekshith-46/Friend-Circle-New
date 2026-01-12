@@ -6,239 +6,281 @@ const FemaleFollowing = require('../models/femaleUser/Following');
 const FemaleFollowers = require('../models/femaleUser/Followers');
 const BlockList = require('../models/maleUser/BlockList');
 const FemaleBlockList = require('../models/femaleUser/BlockList');
+const CallHistory = require('../models/common/CallHistory');
+const GiftReceived = require('../models/femaleUser/GiftReceived');
 
 /**
- * Get detailed following list with user information
- * @param {String} userId - The user ID to get following list for
- * @param {String} userType - 'male' or 'female'
- * @returns {Array} Array of following objects with user details
+ * Get earnings breakdown for specific male users
  */
-const getDetailedFollowingList = async (userId, userType) => {
-  try {
-    let followingList = [];
-    let blockedByCurrentUserIds = [];
-    let blockedByOthersIds = [];
+const getEarningsBreakdownByMaleIds = async (femaleId, maleIds) => {
+  if (!maleIds || maleIds.length === 0) {
+    return [];
+  }
 
-    if (userType === 'male') {
-      // Get list of users that the current male user has blocked
-      const blockedByCurrentUser = await BlockList.find({ maleUserId: userId }).select('blockedUserId');
-      blockedByCurrentUserIds = blockedByCurrentUser.map(block => block.blockedUserId);
-      
-      // Get list of users who have blocked the current male user
-      const blockedByOthers = await FemaleBlockList.find({ blockedUserId: userId }).select('femaleUserId');
-      blockedByOthersIds = blockedByOthers.map(block => block.femaleUserId);
+  // Convert femaleId to ObjectId if it's not already
+  const femaleObjectId = typeof femaleId === 'string' ? require('mongoose').Types.ObjectId(femaleId) : femaleId;
 
-      // Get following list for male user (female users the male is following)
-      followingList = await MaleFollowing.find({ 
-        maleUserId: userId,
-        femaleUserId: { 
-          $nin: [...blockedByCurrentUserIds, ...blockedByOthersIds]
-        }
-      }).populate({
-        path: 'femaleUserId',
-        populate: {
-          path: 'images',
-          model: 'FemaleImage',
-          select: 'imageUrl createdAt updatedAt'
-        }
-      }).select('femaleUserId dateFollowed');
-    } else if (userType === 'female') {
-      // Get list of users that the current female user has blocked
-      const blockedByCurrentUser = await FemaleBlockList.find({ femaleUserId: userId }).select('blockedUserId');
-      blockedByCurrentUserIds = blockedByCurrentUser.map(block => block.blockedUserId);
-      
-      // Get list of users who have blocked the current female user
-      const blockedByOthers = await BlockList.find({ blockedUserId: userId }).select('maleUserId');
-      blockedByOthersIds = blockedByOthers.map(block => block.maleUserId);
-
-      // Get following list for female user (male users the female is following)
-      followingList = await FemaleFollowing.find({ 
-        femaleUserId: userId,
-        maleUserId: { 
-          $nin: [...blockedByCurrentUserIds, ...blockedByOthersIds]
-        }
-      }).populate({
-        path: 'maleUserId',
-        populate: {
-          path: 'images',
-          model: 'MaleImage',
-          select: 'imageUrl createdAt updatedAt'
-        }
-      }).select('maleUserId dateFollowed');
+  // Get call earnings for each male user
+  const callEarnings = await CallHistory.aggregate([
+    {
+      $match: {
+        receiverId: femaleObjectId,
+        callerId: { $in: maleIds.map(id => typeof id === 'string' ? require('mongoose').Types.ObjectId(id) : id) },
+        status: 'completed'
+      }
+    },
+    {
+      $group: {
+        _id: '$callerId',
+        totalCallEarnings: { $sum: '$femaleEarning' },
+        totalCalls: { $sum: 1 }
+      }
     }
+  ]);
 
-    // Format the response to include relationship information
-    const formattedList = followingList.map(relationship => {
-      if (userType === 'male') {
-        // Extract image URLs from the populated images
-        const imageUrls = relationship.femaleUserId.images && Array.isArray(relationship.femaleUserId.images) 
-          ? relationship.femaleUserId.images.map(img => ({
-              id: img._id,
-              url: img.imageUrl,
-              createdAt: img.createdAt
-            }))
-          : [];
-        
-        return {
-          relationshipId: relationship._id,
-          followedUser: {
-            _id: relationship.femaleUserId._id,
-            name: relationship.femaleUserId.name || `${relationship.femaleUserId.firstName} ${relationship.femaleUserId.lastName || ''}`,
-            email: relationship.femaleUserId.email,
-            gender: relationship.femaleUserId.gender,
-            bio: relationship.femaleUserId.bio,
-            images: imageUrls,
-            createdAt: relationship.femaleUserId.createdAt,
-          },
-          dateFollowed: relationship.dateFollowed
-        };
-      } else {
-        // Extract image URLs from the populated images
-        const imageUrls = relationship.maleUserId.images && Array.isArray(relationship.maleUserId.images) 
-          ? relationship.maleUserId.images.map(img => ({
-              id: img._id,
-              url: img.imageUrl,
-              createdAt: img.createdAt
-            }))
-          : [];
-        
-        return {
-          relationshipId: relationship._id,
-          followedUser: {
-            _id: relationship.maleUserId._id,
-            name: `${relationship.maleUserId.firstName} ${relationship.maleUserId.lastName || ''}`,
-            email: relationship.maleUserId.email,
-            gender: relationship.maleUserId.gender,
-            bio: relationship.maleUserId.bio,
-            images: imageUrls,
-            createdAt: relationship.maleUserId.createdAt,
-          },
-          dateFollowed: relationship.dateFollowed
-        };
+  // Get gift earnings for each male user
+  const giftEarnings = await GiftReceived.aggregate([
+    {
+      $match: {
+        receiverId: femaleObjectId,
+        senderId: { $in: maleIds.map(id => typeof id === 'string' ? require('mongoose').Types.ObjectId(id) : id) }
+        // Note: GiftReceived model doesn't have a status field by default
+        // If needed, we'd need to add status field to GiftReceived model
+      }
+    },
+    {
+      $group: {
+        _id: '$senderId',
+        totalGiftEarnings: { $sum: '$coinsSpent' },
+        totalGifts: { $sum: 1 }
+      }
+    }
+  ]);
+
+  // Create maps for easy lookup
+  const callEarningsMap = {};
+  callEarnings.forEach(item => {
+    callEarningsMap[item._id.toString()] = {
+      callCoins: item.totalCallEarnings || 0,
+      calls: item.totalCalls || 0,
+      tips: 0 // No tip earnings for now
+    };
+  });
+
+  const giftEarningsMap = {};
+  giftEarnings.forEach(item => {
+    giftEarningsMap[item._id.toString()] = {
+      giftCoins: item.totalGiftEarnings || 0,
+      gifts: item.totalGifts || 0
+    };
+  });
+
+  // Combine earnings data
+  const earningsData = [];
+  const allUniqueMaleIds = new Set([...maleIds.map(id => id.toString())]);
+  
+  allUniqueMaleIds.forEach(maleId => {
+    const callData = callEarningsMap[maleId] || { callCoins: 0, calls: 0, tips: 0 };
+    const giftData = giftEarningsMap[maleId] || { giftCoins: 0, gifts: 0 };
+    
+    const totalEarnings = callData.callCoins + giftData.giftCoins;
+    
+    earningsData.push({
+      maleId,
+      earnings: {
+        total: totalEarnings,
+        calls: callData.calls,
+        callCoins: callData.callCoins,
+        gifts: giftData.gifts,
+        giftCoins: giftData.giftCoins,
+        tips: callData.tips
       }
     });
+  });
 
-    return formattedList;
-  } catch (error) {
-    throw new Error(`Error getting following list: ${error.message}`);
-  }
+  return earningsData;
 };
 
 /**
- * Get detailed followers list with user information
- * @param {String} userId - The user ID to get followers list for
- * @param {String} userType - 'male' or 'female'
- * @returns {Array} Array of followers objects with user details
+ * Get detailed following list for female users
+ */
+const getDetailedFollowingList = async (userId, userType) => {
+  let followingList = [];
+  let blockedByCurrentUserIds = [];
+  let blockedByOthersIds = [];
+
+  if (userType === 'male') {
+    // Get list of users that the current male user has blocked
+    const blockedByCurrentUser = await BlockList.find({ maleUserId: userId }).select('blockedUserId');
+    blockedByCurrentUserIds = blockedByCurrentUser.map(block => block.blockedUserId);
+    
+    // Get list of users who have blocked the current male user
+    const blockedByOthers = await FemaleBlockList.find({ blockedUserId: userId }).select('femaleUserId');
+    blockedByOthersIds = blockedByOthers.map(block => block.femaleUserId);
+
+    // Get following list for male user (female users the male is following)
+    followingList = await MaleFollowing.find({ 
+      maleUserId: userId,
+      femaleUserId: { 
+        $nin: [...blockedByCurrentUserIds, ...blockedByOthersIds]
+      }
+    }).populate({
+      path: 'femaleUserId',
+      populate: {
+        path: 'images',
+        model: 'FemaleImage',
+        select: 'imageUrl createdAt updatedAt'
+      }
+    }).select('femaleUserId dateFollowed');
+  } else if (userType === 'female') {
+    // Get list of users that the current female user has blocked
+    const blockedByCurrentUser = await FemaleBlockList.find({ femaleUserId: userId }).select('blockedUserId');
+    blockedByCurrentUserIds = blockedByCurrentUser.map(block => block.blockedUserId);
+    
+    // Get list of users who have blocked the current female user
+    const blockedByOthers = await BlockList.find({ blockedUserId: userId }).select('maleUserId');
+    blockedByOthersIds = blockedByOthers.map(block => block.maleUserId);
+
+    // Get following list for female user (male users the female is following)
+    followingList = await FemaleFollowing.find({ 
+      femaleUserId: userId,
+      maleUserId: { 
+        $nin: [...blockedByCurrentUserIds, ...blockedByOthersIds]
+      }
+    }).populate({
+      path: 'maleUserId',
+      populate: {
+        path: 'images',
+        model: 'MaleImage',
+        select: 'imageUrl createdAt updatedAt'
+      }
+    }).select('maleUserId dateFollowed');
+
+    // Get earnings breakdown for each male user
+    const maleIds = followingList.map(relationship => relationship.maleUserId._id);
+    const earningsData = await getEarningsBreakdownByMaleIds(userId, maleIds);
+    var earningsMap = {}; // Using var to hoist to function scope
+    earningsData.forEach(earning => {
+      earningsMap[earning.maleId] = earning.earnings;
+    });
+  }
+
+  return followingList.map(relationship => {
+    const user = userType === 'male' ? relationship.femaleUserId : relationship.maleUserId;
+    
+    // Get earnings data for this user
+    const earnings = earningsMap[relationship[userType === 'male' ? 'femaleUserId' : 'maleUserId']._id.toString()] || {
+      total: 0,
+      calls: 0,
+      callCoins: 0,
+      gifts: 0,
+      giftCoins: 0,
+      tips: 0,
+      tipCoins: 0
+    };
+
+    return {
+      _id: user._id,
+      name: userType === 'male' 
+        ? `${user.firstName || ''} ${user.lastName || ''}`.trim()
+        : `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+      email: user.email,
+      profileImage: user.images && user.images.length > 0 ? user.images[0].imageUrl : null,
+      dateFollowed: relationship.dateFollowed,
+      earnings: earnings
+    };
+  });
+};
+
+/**
+ * Get detailed followers list for female users
  */
 const getDetailedFollowersList = async (userId, userType) => {
-  try {
-    let followersList = [];
-    let blockedByCurrentUserIds = [];
-    let blockedByOthersIds = [];
+  let followersList = [];
+  let blockedByCurrentUserIds = [];
+  let blockedByOthersIds = [];
 
-    if (userType === 'male') {
-      // Get list of users that the current male user has blocked
-      const blockedByCurrentUser = await BlockList.find({ maleUserId: userId }).select('blockedUserId');
-      blockedByCurrentUserIds = blockedByCurrentUser.map(block => block.blockedUserId);
-      
-      // Get list of users who have blocked the current male user
-      const blockedByOthers = await FemaleBlockList.find({ blockedUserId: userId }).select('femaleUserId');
-      blockedByOthersIds = blockedByOthers.map(block => block.femaleUserId);
+  if (userType === 'male') {
+    // Get list of users that the current male user has blocked
+    const blockedByCurrentUser = await BlockList.find({ maleUserId: userId }).select('blockedUserId');
+    blockedByCurrentUserIds = blockedByCurrentUser.map(block => block.blockedUserId);
+    
+    // Get list of users who have blocked the current male user
+    const blockedByOthers = await FemaleBlockList.find({ blockedUserId: userId }).select('femaleUserId');
+    blockedByOthersIds = blockedByOthers.map(block => block.femaleUserId);
 
-      // Get followers list for male user (female users following the male)
-      followersList = await MaleFollowers.find({ 
-        maleUserId: userId,
-        femaleUserId: { 
-          $nin: [...blockedByCurrentUserIds, ...blockedByOthersIds]
-        }
-      }).populate({
-        path: 'femaleUserId',
-        populate: {
-          path: 'images',
-          model: 'FemaleImage',
-          select: 'imageUrl createdAt updatedAt'
-        }
-      }).select('femaleUserId dateFollowed');
-    } else if (userType === 'female') {
-      // Get list of users that the current female user has blocked
-      const blockedByCurrentUser = await FemaleBlockList.find({ femaleUserId: userId }).select('blockedUserId');
-      blockedByCurrentUserIds = blockedByCurrentUser.map(block => block.blockedUserId);
-      
-      // Get list of users who have blocked the current female user
-      const blockedByOthers = await BlockList.find({ blockedUserId: userId }).select('maleUserId');
-      blockedByOthersIds = blockedByOthers.map(block => block.maleUserId);
-
-      // Get followers list for female user (male users following the female)
-      followersList = await FemaleFollowers.find({ 
-        femaleUserId: userId,
-        maleUserId: { 
-          $nin: [...blockedByCurrentUserIds, ...blockedByOthersIds]
-        }
-      }).populate({
-        path: 'maleUserId',
-        populate: {
-          path: 'images',
-          model: 'MaleImage',
-          select: 'imageUrl createdAt updatedAt'
-        }
-      }).select('maleUserId dateFollowed');
-    }
-
-    // Format the response to include relationship information
-    const formattedList = followersList.map(relationship => {
-      if (userType === 'male') {
-        // Extract image URLs from the populated images
-        const imageUrls = relationship.femaleUserId.images && Array.isArray(relationship.femaleUserId.images) 
-          ? relationship.femaleUserId.images.map(img => ({
-              id: img._id,
-              url: img.imageUrl,
-              createdAt: img.createdAt
-            }))
-          : [];
-        
-        return {
-          relationshipId: relationship._id,
-          followerUser: {
-            _id: relationship.femaleUserId._id,
-            name: relationship.femaleUserId.name,
-            email: relationship.femaleUserId.email,
-            gender: relationship.femaleUserId.gender,
-            bio: relationship.femaleUserId.bio,
-            images: imageUrls,
-            createdAt: relationship.femaleUserId.createdAt,
-          },
-          dateFollowed: relationship.dateFollowed
-        };
-      } else {
-        // Extract image URLs from the populated images
-        const imageUrls = relationship.maleUserId.images && Array.isArray(relationship.maleUserId.images) 
-          ? relationship.maleUserId.images.map(img => ({
-              id: img._id,
-              url: img.imageUrl,
-              createdAt: img.createdAt
-            }))
-          : [];
-        
-        return {
-          relationshipId: relationship._id,
-          followerUser: {
-            _id: relationship.maleUserId._id,
-            name: `${relationship.maleUserId.firstName} ${relationship.maleUserId.lastName || ''}`,
-            email: relationship.maleUserId.email,
-            gender: relationship.maleUserId.gender,
-            bio: relationship.maleUserId.bio,
-            images: imageUrls,
-            createdAt: relationship.maleUserId.createdAt,
-          },
-          dateFollowed: relationship.dateFollowed
-        };
+    // Get followers list for male user (female users following the male)
+    followersList = await MaleFollowers.find({ 
+      maleUserId: userId,
+      femaleUserId: { 
+        $nin: [...blockedByCurrentUserIds, ...blockedByOthersIds]
       }
-    });
+    }).populate({
+      path: 'femaleUserId',
+      populate: {
+        path: 'images',
+        model: 'FemaleImage',
+        select: 'imageUrl createdAt updatedAt'
+      }
+    }).select('femaleUserId dateFollowed');
+  } else if (userType === 'female') {
+    // Get list of users that the current female user has blocked
+    const blockedByCurrentUser = await FemaleBlockList.find({ femaleUserId: userId }).select('blockedUserId');
+    blockedByCurrentUserIds = blockedByCurrentUser.map(block => block.blockedUserId);
+    
+    // Get list of users who have blocked the current female user
+    const blockedByOthers = await BlockList.find({ blockedUserId: userId }).select('maleUserId');
+    blockedByOthersIds = blockedByOthers.map(block => block.maleUserId);
 
-    return formattedList;
-  } catch (error) {
-    throw new Error(`Error getting followers list: ${error.message}`);
+    // Get followers list for female user (male users following the female)
+    followersList = await FemaleFollowers.find({ 
+      femaleUserId: userId,
+      maleUserId: { 
+        $nin: [...blockedByCurrentUserIds, ...blockedByOthersIds]
+      }
+    }).populate({
+      path: 'maleUserId',
+      populate: {
+        path: 'images',
+        model: 'MaleImage',
+        select: 'imageUrl createdAt updatedAt'
+      }
+    }).select('maleUserId dateFollowed');
+
+    // Get earnings breakdown for each male user
+    const maleIds = followersList.map(relationship => relationship.maleUserId._id);
+    const earningsData = await getEarningsBreakdownByMaleIds(userId, maleIds);
+    var earningsMap = {}; // Using var to hoist to function scope for this function
+    earningsData.forEach(earning => {
+      earningsMap[earning.maleId] = earning.earnings;
+    });
   }
+
+  return followersList.map(relationship => {
+    const user = userType === 'male' ? relationship.femaleUserId : relationship.maleUserId;
+    
+    // Get earnings data for this user
+    const earnings = earningsMap[relationship[userType === 'male' ? 'femaleUserId' : 'maleUserId']._id.toString()] || {
+      total: 0,
+      calls: 0,
+      callCoins: 0,
+      gifts: 0,
+      giftCoins: 0,
+      tips: 0,
+      tipCoins: 0
+    };
+
+    return {
+      _id: user._id,
+      name: userType === 'male' 
+        ? `${user.firstName || ''} ${user.lastName || ''}`.trim()
+        : `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+      email: user.email,
+      profileImage: user.images && user.images.length > 0 ? user.images[0].imageUrl : null,
+      dateFollowed: relationship.dateFollowed,
+      earnings: earnings
+    };
+  });
 };
 
 module.exports = {

@@ -207,6 +207,9 @@ router.get('/rewards', auth, requireReviewAccepted, earningsController.getReward
 router.get('/calls/earnings', auth, requireReviewAccepted, callEarningsController.getCallEarnings);
 router.get('/calls/earnings-stats', auth, requireReviewAccepted, callEarningsController.getCallEarningsStats);
 
+// Earnings Breakdown per Male Routes
+router.use('/earnings-breakdown', require('./femaleEarningsBreakdownRoutes'));
+
 // Gift Routes
 router.get('/gifts/received', auth, requireReviewAccepted, giftController.getReceivedGifts);
 router.get('/gifts/stats', auth, requireReviewAccepted, giftController.getGiftStats);
