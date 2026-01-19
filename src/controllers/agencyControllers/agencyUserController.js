@@ -277,7 +277,10 @@ exports.completeAgencyProfile = async (req, res) => {
     
     // Handle image upload if provided
     if (req.file) {
-      const imageUrl = req.file.path;
+      // Upload image to Cloudinary
+      const uploadToCloudinary = require('../../utils/cloudinaryUpload');
+      const result = await uploadToCloudinary(req.file.buffer, 'agency_images');
+      const imageUrl = result.secure_url;
       
       // Create image record
       const imageRecord = new AgencyImage({ agencyUserId: req.user.id, imageUrl });
@@ -355,7 +358,10 @@ exports.updateAgencyProfile = async (req, res) => {
     
     // Handle image upload if provided
     if (req.file) {
-      const imageUrl = req.file.path;
+      // Upload image to Cloudinary
+      const uploadToCloudinary = require('../../utils/cloudinaryUpload');
+      const result = await uploadToCloudinary(req.file.buffer, 'agency_images');
+      const imageUrl = result.secure_url;
       
       // Create image record
       const imageRecord = new AgencyImage({ agencyUserId: req.user.id, imageUrl });

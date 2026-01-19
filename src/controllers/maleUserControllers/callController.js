@@ -145,9 +145,16 @@ exports.startCall = async (req, res) => {
     });
         
     if (existingSession) {
-      return res.status(400).json({
+      // Return the existing active call information to help frontend recover
+      return res.status(409).json({
         success: false,
-        message: 'You already have an active call session'
+        message: 'You already have an active call session',
+        data: {
+          callId: existingSession.callId,
+          receiverId: existingSession.receiverId,
+          callType: existingSession.callType,
+          startedAt: existingSession.createdAt
+        }
       });
     }
         
@@ -617,6 +624,43 @@ exports.getCallHistory = async (req, res) => {
       }
     });
   } catch (err) {
+    return res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+};
+
+// Get active call for user
+exports.getActiveCall = async (req, res) => {
+  try {
+    const callerId = req.user._id;
+
+    const CallSession = require('../../models/common/CallSession');
+
+    const activeCall = await CallSession.findOne({
+      callerId,
+      isActive: true
+    });
+
+    if (!activeCall) {
+      return res.json({
+        success: true,
+        data: null
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        callId: activeCall.callId,
+        receiverId: activeCall.receiverId,
+        callType: activeCall.callType,
+        startedAt: activeCall.createdAt
+      }
+    });
+  } catch (err) {
+    console.error('Error getting active call:', err);
     return res.status(500).json({
       success: false,
       error: err.message
