@@ -1835,8 +1835,9 @@ exports.getDashboard = async (req, res) => {
         // Get all online females matching base criteria
         [results, total] = await Promise.all([
           FemaleUser.find(baseFilter)
-            .select('_id name age gender bio images onlineStatus hideAge createdAt')
+            .select('_id name age images hideAge createdAt languages')
             .populate({ path: 'images', select: 'imageUrl' })
+            .populate({ path: 'languages', select: 'title' })
             .sort({ createdAt: -1 }) // Most recent first
             .skip(skip)
             .limit(limit)
@@ -1862,8 +1863,9 @@ exports.getDashboard = async (req, res) => {
           ...baseFilter,
           locationUpdatedAt: { $gte: cutoffTime }  // Only users with recent location updates
         })
-          .select('_id name age gender bio images onlineStatus hideAge latitude longitude locationUpdatedAt')
+          .select('_id name age images hideAge latitude longitude locationUpdatedAt languages')
           .populate({ path: 'images', select: 'imageUrl' })
+          .populate({ path: 'languages', select: 'title' })
           .lean();
         
         // Filter by distance
@@ -1919,8 +1921,9 @@ exports.getDashboard = async (req, res) => {
         
         [results, total] = await Promise.all([
           FemaleUser.find(followedFilter)
-            .select('_id name age gender bio images onlineStatus hideAge')
+            .select('_id name age images hideAge languages')
             .populate({ path: 'images', select: 'imageUrl' })
+            .populate({ path: 'languages', select: 'title' })
             .skip(skip)
             .limit(limit)
             .lean(),
@@ -1940,8 +1943,9 @@ exports.getDashboard = async (req, res) => {
         
         [results, total] = await Promise.all([
           FemaleUser.find(newFilter)
-            .select('_id name age gender bio images onlineStatus hideAge createdAt')
+            .select('_id name age images hideAge createdAt languages')
             .populate({ path: 'images', select: 'imageUrl' })
+            .populate({ path: 'languages', select: 'title' })
             .sort({ createdAt: -1 }) // Newest first
             .skip(skip)
             .limit(limit)
@@ -1963,10 +1967,11 @@ exports.getDashboard = async (req, res) => {
       const response = {
         _id: female._id,
         name: female.name,
-        gender: female.gender,
-        bio: female.bio,
-        images: female.images && female.images.length > 0 ? [female.images[0]] : [], // Only first image for discovery
-        onlineStatus: female.onlineStatus,
+        // Add first image URL directly instead of array
+        imageUrl: female.images && female.images.length > 0 ? female.images[0].imageUrl : null,
+        // Transform language IDs to language names
+        languages: female.languages && female.languages.length > 0 ? 
+          female.languages.map(lang => lang.title || 'Unknown Language') : []
       };
       
       // Add age only if not hidden
