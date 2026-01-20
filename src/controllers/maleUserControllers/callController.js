@@ -5,6 +5,7 @@ const Transaction = require('../../models/common/Transaction');
 const AdminConfig = require('../../models/admin/AdminConfig');
 const AdminLevelConfig = require('../../models/admin/AdminLevelConfig');
 const messages = require('../../validations/messages');
+const { applyCallTargetReward } = require('../../services/realtimeRewardService');
 
 // Start Call - Check minimum coins requirement and calculate max duration
 exports.startCall = async (req, res) => {
@@ -435,6 +436,10 @@ exports.endCall = async (req, res) => {
       callType: callType || 'video',
       status: 'completed'
     });
+    
+    // ✅ APPLY REAL-TIME CALL TARGET REWARD
+    // This triggers immediately when call completes
+    await applyCallTargetReward(receiverId, callType || 'video', callRecord._id);
 
     // Create transaction records
     await Transaction.create({

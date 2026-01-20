@@ -2,13 +2,13 @@ const AgencyUser = require('../../models/agency/AgencyUser');
 const FemaleUser = require('../../models/femaleUser/FemaleUser');
 const CallHistory = require('../../models/common/CallHistory');
 
-// Agency earnings by referred females
+// Agency earnings by referred females - Enhanced response with scores
 exports.getAgencyEarnings = async (req, res) => {
   try {
     const agencyId = req.user._id;
     
-    // Get query parameters for date filtering
-    const { filter, startDate, endDate } = req.query;
+    // Get body parameters for date filtering (POST method)
+    const { filter, startDate, endDate } = req.body;
     
     // Resolve date range based on filter using rolling 7-day windows
     let start, end;
@@ -59,13 +59,13 @@ exports.getAgencyEarnings = async (req, res) => {
       );
     }
     
-    // Get agency-referred females with populated images
+    // Get agency-referred females with enhanced data
     const females = await FemaleUser.find({
       referredByAgency: agencyId,
       status: 'active',
       reviewStatus: 'accepted'
     })
-    .select('_id name images')
+    .select('_id name images score dailyScore weeklyScore walletBalance')
     .populate('images', 'imageUrl');
     
     if (females.length === 0) {
@@ -80,8 +80,8 @@ exports.getAgencyEarnings = async (req, res) => {
     
     const femaleIds = females.map(f => f._id);
     
-    // Aggregate earnings and time per female
-    const earnings = await CallHistory.aggregate([
+    // Aggregate earnings and time per female for the specified period
+    const periodEarnings = await CallHistory.aggregate([
       {
         $match: {
           receiverId: { $in: femaleIds },
@@ -98,21 +98,25 @@ exports.getAgencyEarnings = async (req, res) => {
       }
     ]);
     
-    // Format response
+    // Format response with enhanced data
     const results = females.map(female => {
-      const stat = earnings.find(e => e._id.toString() === female._id.toString());
+      const periodStat = periodEarnings.find(e => e._id.toString() === female._id.toString());
       
-      // Get first image as thumbnail
-      const thumbnail = female.images && female.images.length > 0 
+      // Get first image as profile image
+      const profileImage = female.images && female.images.length > 0 
         ? female.images[0].imageUrl 
         : null;
       
       return {
         femaleId: female._id,
         name: female.name || 'Unknown',
-        thumbnail: thumbnail,
-        earningCoins: stat ? Math.round(stat.totalCoins * 100) / 100 : 0, // Round to 2 decimals
-        timeHours: stat ? Number((stat.totalSeconds / 3600).toFixed(1)) : 0
+        profileImage: profileImage,  // Enhanced: renamed from thumbnail to profileImage
+        score: female.score || 0,      // Enhanced: total score
+        dailyScore: female.dailyScore || 0,  // Enhanced: daily score
+        weeklyScore: female.weeklyScore || 0, // Enhanced: weekly score
+        earnings: periodStat ? Math.round(periodStat.totalCoins * 100) / 100 : 0, // Enhanced: earnings for the period
+        time: periodStat ? Number((periodStat.totalSeconds / 3600).toFixed(1)) : 0, // Enhanced: time in hours
+        walletBalance: female.walletBalance || 0    // Additional: current wallet balance
       };
     });
     

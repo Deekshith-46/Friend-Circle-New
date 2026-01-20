@@ -30,6 +30,9 @@ router.use('/me/balance', require('./balanceRoutes'));
 // Earnings Routes
 router.use('/earnings', require('./earningsRoutes'));
 
+// Score Routes
+router.use('/scores', require('./scoreRoutes'));
+
 // Transaction Routes
 router.use('/me/transactions', require('./transactionRoutes'));
 

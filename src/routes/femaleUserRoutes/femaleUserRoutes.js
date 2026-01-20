@@ -223,6 +223,9 @@ router.get('/rewards/weekly-rank', auth, requireReviewAccepted, statsController.
 router.post('/increment-missed-calls', auth, requireReviewAccepted, statsController.incrementMissedCalls);
 router.post('/increment-missed-calls/:userId', auth, requireReviewAccepted, statsController.incrementMissedCalls);
 
+// Score Routes
+router.use('/scores', require('./scoreRoutes'));
+
 // KYC Routes
 router.post('/submit-kyc', auth, requireReviewAccepted, kycController.submitKYC);
 router.post('/verify-kyc', auth, requireReviewAccepted, kycController.verifyKYC);

@@ -42,6 +42,7 @@ app.use('/admin/packages', require('./routes/adminRoutes/package'));
 app.use('/admin/staff', require('./routes/adminRoutes/staff'));
 app.use('/admin/users', require('./routes/adminRoutes/users'));
 app.use('/admin/rewards', require('./routes/adminRoutes/reward'));
+app.use('/admin/reward-rules', require('./routes/adminRoutes/newRewardRoutes'));
 app.use('/admin/payouts', require('./routes/adminRoutes/payoutRoutes'));
 app.use('/admin/top-fan-config', require('./routes/adminRoutes/topFanConfig'));
 app.use('/admin/top-fans', require('./routes/adminRoutes/adminTopFans'));
@@ -56,6 +57,7 @@ app.use('/female-user/earnings', require('./routes/femaleUserRoutes/earningsRout
 app.use('/female-user/kyc', require('./routes/femaleUserRoutes/kycRoutes'));  // KYC Routes
 app.use('/female-user/withdrawals', require('./routes/femaleUserRoutes/withdrawalRoutes'));  // Withdrawal Routes
 app.use('/female-user/blocklist', require('./routes/femaleUserRoutes/blockListRoutes'));  // Blocklist Routes
+app.use('/female-user', require('./routes/femaleUserRoutes/scoreRoutes'));  // Score Routes (mounted directly under /female-user)
 
 // Routes for Male User
 app.use('/male-user', require('./routes/maleUserRoutes/maleUserRoutes')); // Male User Routes

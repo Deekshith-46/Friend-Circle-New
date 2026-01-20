@@ -503,6 +503,9 @@ exports.loginUser = async (req, res) => {
 };
 
 // Verify Login OTP - Returns reviewStatus-based response
+const { updateConsecutiveActiveDays } = require('../../utils/updateConsecutiveActiveDays');
+const { applyDailyLoginReward } = require('../../services/realtimeRewardService');
+
 exports.verifyLoginOtp = async (req, res) => {
   const { otp } = req.body;
 
@@ -512,7 +515,15 @@ exports.verifyLoginOtp = async (req, res) => {
     if (user) {
       // Clear OTP after successful login
       user.otp = undefined;
+      
+      // Update consecutive active days ON FIRST LOGIN OF THE DAY
+      // This ensures weekly consistency tracking works correctly
+      await updateConsecutiveActiveDays(user._id);
+      
       await user.save();
+      
+      // ✅ APPLY REAL-TIME DAILY LOGIN REWARD
+      await applyDailyLoginReward(user._id);
 
       // Generate JWT token
       const token = generateToken(user._id, 'female');

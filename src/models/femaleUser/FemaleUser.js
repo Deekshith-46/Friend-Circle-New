@@ -88,6 +88,15 @@ const femaleUserSchema = new mongoose.Schema({
   referralCode: { type: String, unique: true, sparse: true },
   referredByFemale: [{ type: mongoose.Schema.Types.ObjectId, ref: 'FemaleUser' }],
   referredByAgency: [{ type: mongoose.Schema.Types.ObjectId, ref: 'AgencyUser' }],
+  
+  // Score system
+  score: { type: Number, default: 0 },        // totalScore (lifetime)
+  dailyScore: { type: Number, default: 0 },   // resets daily
+  weeklyScore: { type: Number, default: 0 },  // resets weekly
+  
+  // Activity tracking for scoring
+  lastActiveDate: { type: Date },
+  consecutiveActiveDays: { type: Number, default: 0 },
 }, { timestamps: true });
 
 module.exports = mongoose.model('FemaleUser', femaleUserSchema);

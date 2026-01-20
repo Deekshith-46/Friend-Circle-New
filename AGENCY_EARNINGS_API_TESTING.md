@@ -9,10 +9,10 @@ BASE_URL
 
 ### 1.1 Get Agency Earnings by Referred Females
 ```
-GET /agency/earnings
+POST /agency/earnings
 ```
 
-**Query Parameters:**
+**Request Body Parameters:**
 - `filter`: "thisWeek" | "lastWeek" | "custom"
 - `startDate`: "YYYY-MM-DD" (required if filter="custom")
 - `endDate`: "YYYY-MM-DD" (required if filter="custom")
@@ -23,22 +23,36 @@ GET /agency/earnings
 
 ### 2.1 Get This Week's Earnings
 ```
-GET /agency/earnings?filter=thisWeek
+POST /agency/earnings
+{
+  "filter": "thisWeek"
+}
 ```
 
 ### 2.2 Get Last Week's Earnings
 ```
-GET /agency/earnings?filter=lastWeek
+POST /agency/earnings
+{
+  "filter": "lastWeek"
+}
 ```
 
 ### 2.3 Get Custom Date Range Earnings
 ```
-GET /agency/earnings?filter=custom&startDate=2025-09-20&endDate=2025-09-27
+POST /agency/earnings
+{
+  "filter": "custom",
+  "startDate": "2025-09-20",
+  "endDate": "2025-09-27"
+}
 ```
 
 ### 2.4 Default (This Week if No Filter)
 ```
-GET /agency/earnings
+POST /agency/earnings
+{
+  "filter": "thisWeek"
+}
 ```
 
 ---
@@ -55,9 +69,13 @@ GET /agency/earnings
       {
         "femaleId": "6954d27beb163b2d78ebd8f2",
         "name": "Female A",
-        "thumbnail": "https://res.cloudinary.com/...jpg",
-        "earningCoins": 5555.5,
-        "timeHours": 5.5
+        "profileImage": "https://res.cloudinary.com/...jpg",
+        "score": 1250,
+        "dailyScore": 15,
+        "weeklyScore": 85,
+        "earnings": 5555.5,
+        "time": 5.5,
+        "walletBalance": 2500.00
       }
     ]
   }
@@ -88,9 +106,13 @@ GET /agency/earnings
 ### 4.3 Individual Female Object
 - `femaleId`: MongoDB ObjectId of the female user
 - `name`: Full name (firstName + lastName)
-- `thumbnail`: Profile image URL or null
-- `earningCoins`: Total coins earned in the date range (2 decimal places)
-- `timeHours`: Total call time in hours (1 decimal place)
+- `profileImage`: Profile image URL or null
+- `score`: Lifetime total score of the female user
+- `dailyScore`: Daily score for the female user
+- `weeklyScore`: Weekly score for the female user
+- `earnings`: Total coins earned in the date range (2 decimal places)
+- `time`: Total call time in hours (1 decimal place)
+- `walletBalance`: Current wallet balance of the female user
 
 ---
 
