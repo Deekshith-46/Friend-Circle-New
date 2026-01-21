@@ -1,50 +1,28 @@
-/**
- * Date utility functions for consistent date handling
- */
+// src/utils/dateUtils.js
 
 /**
- * Get start of day (00:00:00.000)
- * @param {Date} date - Date to process (defaults to now)
- * @returns {Date} Start of day
+ * Resolves date range for API queries
+ * @param {string} startDate - Start date string (optional)
+ * @param {string} endDate - End date string (optional)
+ * @returns {Object} Object containing start and end Date objects
  */
-exports.getStartOfDay = (date = new Date()) => {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d;
-};
+exports.resolveDateRange = (startDate, endDate) => {
+  let start;
+  let end;
 
-/**
- * Get end of day (23:59:59.999)
- * @param {Date} date - Date to process (defaults to now)
- * @returns {Date} End of day
- */
-exports.getEndOfDay = (date = new Date()) => {
-  const d = new Date(date);
-  d.setHours(23, 59, 59, 999);
-  return d;
-};
+  if (startDate && endDate) {
+    // Custom date range
+    start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
 
-/**
- * Get start of week (Monday 00:00:00.000)
- * @param {Date} date - Date to process (defaults to now)
- * @returns {Date} Start of week (Monday)
- */
-exports.getStartOfWeek = (date = new Date()) => {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
-  const monday = new Date(d.setDate(diff));
-  monday.setHours(0, 0, 0, 0);
-  return monday;
-};
+    end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+  } else {
+    // Default → TODAY
+    start = new Date();
+    start.setHours(0, 0, 0, 0);
+    end = new Date(); // now
+  }
 
-/**
- * Normalize date to midnight for consistent referenceDate
- * @param {Date} date - Date to normalize
- * @returns {Date} Normalized date at 00:00:00.000
- */
-exports.normalizeDate = (date = new Date()) => {
-  const normalized = new Date(date);
-  normalized.setHours(0, 0, 0, 0);
-  return normalized;
+  return { start, end };
 };

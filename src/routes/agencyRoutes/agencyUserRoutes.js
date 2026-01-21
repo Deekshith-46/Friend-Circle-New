@@ -39,6 +39,15 @@ router.use('/me/transactions', require('./transactionRoutes'));
 // Withdrawal Routes
 router.use('/withdrawals', require('./withdrawalRoutes'));
 
+// My Earnings & My Withdrawals Routes
+const myEarningsController = require('../../controllers/agencyControllers/myEarningsController');
+const myWithdrawalsController = require('../../controllers/agencyControllers/myWithdrawalsController');
+const { requireReviewAccepted } = require('../../middlewares/reviewStatusMiddleware');
+
+router.post('/my-earnings', auth, requireReviewAccepted, myEarningsController.getMyEarnings);
+router.get('/total-coins', auth, requireReviewAccepted, myEarningsController.getTotalCoins);
+router.post('/my-withdrawals', auth, requireReviewAccepted, myWithdrawalsController.getMyWithdrawals);
+
 module.exports = router;
 
 

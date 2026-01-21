@@ -70,7 +70,7 @@ app.use('/male-user/payment', require('./routes/maleUserRoutes/paymentRoutes'));
 app.use('/male-user/gifts', require('./routes/maleUserRoutes/giftRoutes')); // Gift Routes
 
 // Routes for Agency User
-app.use('/agency', require('./routes/agencyRoutes/agencyUserRoutes'));
+app.use('/agency', require('./routes/agencyRoutes/agencyUserRoutes')); // Main Agency Routes
 
 // Common routes
 app.use('/chat', require('./routes/common/chatRoutes'));

@@ -389,6 +389,8 @@ exports.endCall = async (req, res) => {
     // Calculate admin and agency shares from platform margin
     let adminEarned = 0;
     let agencyEarned = 0;
+    let adminSharePercentage = 0;
+    let agencySharePercentage = 0;
     
     if (isAgencyFemale) {
       // For agency females, split the platform margin
@@ -401,13 +403,16 @@ exports.endCall = async (req, res) => {
           message: 'Admin share percentage not configured'
         });
       }
-      const adminShare = Math.round(platformMargin * adminConfig.adminSharePercentage / 100);
-      const agencyShare = platformMargin - adminShare;
-      adminEarned = adminShare;
-      agencyEarned = agencyShare;
+      adminSharePercentage = adminConfig.adminSharePercentage;
+      agencySharePercentage = 100 - adminSharePercentage;
+      
+      adminEarned = Number((platformMargin * adminSharePercentage / 100).toFixed(2));
+      agencyEarned = Number((platformMargin * agencySharePercentage / 100).toFixed(2));
     } else {
       // For non-agency females, all platform margin goes to admin
-      adminEarned = platformMargin;
+      adminSharePercentage = 100;
+      agencySharePercentage = 0;
+      adminEarned = Number((platformMargin * adminSharePercentage / 100).toFixed(2));
       agencyEarned = 0;
     }
     
@@ -432,6 +437,8 @@ exports.endCall = async (req, res) => {
       platformMargin,
       adminEarned,
       agencyEarned,
+      adminSharePercentage,
+      agencySharePercentage,
       isAgencyFemale,
       callType: callType || 'video',
       status: 'completed'

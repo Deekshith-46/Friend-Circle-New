@@ -7,4 +7,6 @@ const earningsController = require('../../controllers/agencyControllers/agencyEa
 // Get earnings for referred females - POST method (enhanced security)
 router.post('/', auth, requireReviewAccepted, earningsController.getAgencyEarnings);
 
+
+
 module.exports = router;

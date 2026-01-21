@@ -83,6 +83,17 @@ const callHistorySchema = new mongoose.Schema({
     required: true,
     min: 0
   },
+  // Snapshot of admin configuration at call time (for audit trail)
+  adminSharePercentage: { // Admin share % at call end time
+    type: Number,
+    min: 0,
+    max: 100
+  },
+  agencySharePercentage: { // Agency share % at call end time
+    type: Number,
+    min: 0,
+    max: 100
+  },
   isAgencyFemale: { // Flag to identify if the female belongs to an agency
     type: Boolean,
     required: true,
